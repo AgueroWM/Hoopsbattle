@@ -8,6 +8,7 @@ const Highlights: React.FC = () => {
   const [videos, setVideos] = useState<HighlightVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const videoRefs = React.useRef<{ [key: string]: HTMLVideoElement | null }>({});
 
   useEffect(() => {
     fetchVideos();
@@ -17,11 +18,48 @@ const Highlights: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const video = entry.target as HTMLVideoElement;
+          // Si la vidéo est visible à >50% et que c'est une vidéo HTML5 (pas iframe Youtube)
+          if (entry.intersectionRatio > 0.6) {
+             video.play().catch(() => {}); 
+          } else {
+             video.pause();
+          }
+        });
+      },
+      { threshold: 0.6 }
+    );
+
+    // Observe all video elements
+    Object.values(videoRefs.current).forEach((el) => {
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, [videos]);
+
   const fetchVideos = async () => {
         const data = await api.content.getHighlights();
         // Filtrer les URLs vides
         setVideos(data.filter(v => v.videoUrl));
         setLoading(false);
+  };
+
+  const handleRef = (id: string) => (el: HTMLVideoElement | null) => {
+    videoRefs.current[id] = el;
+  };
+
+  const toggleMute = (e: React.MouseEvent, id: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const video = videoRefs.current[id];
+      if (video) {
+          video.muted = !video.muted;
+      }
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -69,7 +107,7 @@ const Highlights: React.FC = () => {
   return (
     // Utilisation de 100dvh pour le mobile et padding bottom pour éviter le dock
     <div className="fixed inset-0 top-16 z-10 bg-black">
-      <div className="h-[calc(100dvh-64px)] w-full overflow-y-scroll snap-y snap-mandatory bg-black no-scrollbar pb-0">
+      <div className="h-[calc(100dvh-64px)] w-full overflow-y-scroll snap-y snap-mandatory bg-black no-scrollbar pb-20">
         {videos.map((video) => (
           <div key={video.id} className="h-full w-full snap-start relative flex items-center justify-center bg-gray-900 border-b border-white/10 group">
             
@@ -99,14 +137,18 @@ const Highlights: React.FC = () => {
                         ></iframe>
                     </div>
                 ) : isVideoFile(video.videoUrl) ? (
-                   <video 
-                      src={video.videoUrl} 
-                      className="w-full h-full object-cover"
-                      loop 
-                      muted 
-                      autoPlay 
-                      playsInline
-                    />
+                   <>
+                       <video 
+                          ref={handleRef(video.id)}
+                          src={video.videoUrl} 
+                          className="w-full h-full object-contain bg-black"
+                          loop 
+                          muted={true}
+                          playsInline
+                          controls
+                          preload="metadata"
+                        />
+                   </>
                 ) : (
                     <img 
                         src={video.videoUrl} 

@@ -18,7 +18,10 @@ export const api = {
           team_a:teams!team_a_id(*, players(*)),
           team_b:teams!team_b_id(*, players(*))
         `)
-        .order('start_time', { ascending: true });
+        .order('start_time', { ascending: true })
+        // Optimisation: On ne charge pas tout l'historique par défaut si la table grandit
+        // Pour l'instant on limite à 50 matchs pour éviter le chargement infini
+        .limit(50); 
 
       if (error) throw error;
       

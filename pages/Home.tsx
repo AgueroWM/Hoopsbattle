@@ -145,6 +145,7 @@ const Home: React.FC = () => {
                             src={media.video_url || media.media_url} 
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
                             alt="Highlight"
+                            loading="lazy"
                             onError={() => handleMediaError(media.id)}
                         />
                     )}
@@ -195,6 +196,7 @@ const Home: React.FC = () => {
                         src={team.logoUrl} 
                         className="w-12 h-12 rounded-full object-cover bg-white/5 border border-white/10" 
                         alt={team.name}
+                        loading="lazy"
                         onError={(e) => {
                             (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(team.name)}&background=random&color=fff`;
                         }}

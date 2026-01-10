@@ -34,6 +34,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
+      if (selectedFile.size > 50 * 1024 * 1024) {
+          alert("Le fichier est trop volumineux (Max 50Mo).");
+          return;
+      }
       setFile(selectedFile);
       setStep('details');
     }

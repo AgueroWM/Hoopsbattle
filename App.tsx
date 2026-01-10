@@ -48,7 +48,7 @@ const LayoutContent = () => {
       </main>
 
       {!isFeed && <Footer />}
-      {!isFeed && <MobileDock />}
+      <MobileDock />
     </div>
   );
 };

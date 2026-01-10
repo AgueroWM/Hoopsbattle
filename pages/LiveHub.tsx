@@ -316,7 +316,7 @@ const LiveHub: React.FC = () => {
               {/* VIDEO CONTAINER */}
               <div 
                   ref={videoContainerRef} 
-                  className={`aspect-video bg-black rounded-2xl overflow-hidden relative shadow-2xl border border-white/10 group ${isFullscreen ? 'fixed inset-0 z-[9999] rounded-none' : ''}`}
+                  className={`aspect-video w-full bg-black rounded-2xl overflow-hidden relative shadow-2xl border border-white/10 group min-h-[200px] ${isFullscreen ? 'fixed inset-0 z-[9999] rounded-none' : ''}`}
               >
                   {match.youtubeId ? (
                       match.youtubeId.startsWith('twitch:') ? (
@@ -333,7 +333,7 @@ const LiveHub: React.FC = () => {
                          // LECTEUR YOUTUBE
                          <iframe 
                             width="100%" height="100%" 
-                            src={`https://www.youtube.com/embed/${match.youtubeId}?autoplay=1&origin=${window.location.origin}&modestbranding=1&rel=0`} 
+                            src={`https://www.youtube.com/embed/${match.youtubeId}?autoplay=1&origin=${window.location.origin}&modestbranding=1&rel=0&playsinline=1&mute=1`} 
                             title="Live Match"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                             allowFullScreen

@@ -1,19 +1,15 @@
 import { Team, Match, HighlightVideo, BracketMatch } from './types';
 
-const THEME_BG = '0f172a';
-const THEME_ACCENT = 'F4FF5F'; // Jaune Hoops
+// Helper to generate placeholder images
+const getLogo = (name: string) => `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0f172a&color=F4FF5F&size=200&font-size=0.33&bold=true&length=2&rounded=true`;
 
-const getLogo = (name: string) => {
-  // Fallback UI Avatars si pas de logo uploadé
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=${THEME_BG}&color=${THEME_ACCENT}&size=200&font-size=0.33&bold=true&length=2&rounded=true`;
-};
-
+// --- TEAMS ---
 export const TEAMS: Team[] = [
-  // Équipes confirmées - Poule A
-  { id: 't_brigade', name: 'Squad Paris 18', city: 'Paris', logoUrl: getLogo('Squad Paris'), wins: 0, losses: 0, roster: [] },
-  { id: 't_genz', name: 'Rookies 92', city: 'Nanterre', logoUrl: getLogo('Rookies'), wins: 0, losses: 0, roster: [] },
-  { id: 't_akatsuki', name: 'Red Clouds', city: 'Bordeaux', logoUrl: getLogo('Red Clouds'), wins: 0, losses: 0, roster: [] },
-  { id: 't_667', name: 'Lille Métropole', city: 'Lille', logoUrl: getLogo('Lille'), wins: 0, losses: 0, roster: [] },
+  // --- EXISTING & CONFIRMED ---
+  { id: 't_brigade', name: 'La Brigade Fantôme', city: 'Paris', logoUrl: getLogo('La Brigade Fantôme'), wins: 0, losses: 0, roster: [] },
+  { id: 't_genz', name: 'Gen Z', city: 'Lyon', logoUrl: getLogo('Gen Z'), wins: 0, losses: 0, roster: [] },
+  { id: 't_akatsuki', name: 'Akatsuki', city: 'Bordeaux', logoUrl: getLogo('Akatsuki'), wins: 0, losses: 0, roster: [] },
+  { id: 't_667', name: 'Le Collectif 667', city: 'Lille', logoUrl: getLogo('Collectif 667'), wins: 0, losses: 0, roster: [] },
   { id: 't_meute', name: 'La Meute', city: 'Marseille', logoUrl: getLogo('La Meute'), wins: 0, losses: 0, roster: [] },
   
   { id: 't_kingdom', name: 'Kingdom', city: 'Nantes', logoUrl: getLogo('Kingdom'), wins: 0, losses: 0, roster: [] },
@@ -34,7 +30,7 @@ export const TEAMS: Team[] = [
   { id: 't_warriors', name: 'Warriors', city: 'San Francisco', logoUrl: getLogo('Warriors'), wins: 0, losses: 0, roster: [] },
   { id: 't_mercenaires', name: 'Les Mercenaires', city: 'Grenoble', logoUrl: getLogo('Les Mercenaires'), wins: 0, losses: 0, roster: [] },
 
-  // Slots dynamiques pour le tournoi
+  // --- DYNAMIC PLACEHOLDERS ---
   { id: 't_win_m1', name: 'Vainqueur Match 1', city: 'TBD', logoUrl: getLogo('W1'), wins: 0, losses: 0, roster: [] },
   { id: 't_win_m2', name: 'Vainqueur Match 2', city: 'TBD', logoUrl: getLogo('W2'), wins: 0, losses: 0, roster: [] },
   { id: 't_win_m3', name: 'Vainqueur Match 3', city: 'TBD', logoUrl: getLogo('W3'), wins: 0, losses: 0, roster: [] },
@@ -50,12 +46,13 @@ export const TEAMS: Team[] = [
 
 const findTeam = (id: string) => TEAMS.find(t => t.id === id) || TEAMS[0];
 
+// --- SCHEDULE DATA ---
 const EMPTY_MATCH_BASE = {
     scoreA: 0, scoreB: 0, quarter: 1, timeLeft: '10:00', isLive: false, events: [], activePlayersA: [], activePlayersB: []
 };
 
 export const INITIAL_SCHEDULE_DATA = [
-    // SAMEDI 10/01
+    // --- SAMEDI 10/01 ---
     {
         id: 'm_10_01',
         start_time: '2026-01-10T15:00:00',
@@ -85,7 +82,7 @@ export const INITIAL_SCHEDULE_DATA = [
         status: 'scheduled'
     },
 
-    // DIMANCHE 11/01
+    // --- DIMANCHE 11/01 ---
     {
         id: 'm_11_01',
         start_time: '2026-01-11T15:00:00',
@@ -115,7 +112,7 @@ export const INITIAL_SCHEDULE_DATA = [
         status: 'scheduled'
     },
 
-    // SAMEDI 17/01
+    // --- SAMEDI 17/01 ---
     {
         id: 'm_17_01',
         start_time: '2026-01-17T15:00:00',
@@ -145,7 +142,7 @@ export const INITIAL_SCHEDULE_DATA = [
         status: 'scheduled'
     },
 
-    // DIMANCHE 18/01
+    // --- DIMANCHE 18/01 ---
     {
         id: 'm_18_01',
         start_time: '2026-01-18T15:00:00',
@@ -175,7 +172,7 @@ export const INITIAL_SCHEDULE_DATA = [
         status: 'scheduled'
     },
 
-    // FINAL DAY 25/01
+    // --- FINAL DAY 25/01 ---
     {
         id: 'm_25_01',
         start_time: '2026-01-25T16:00:00',
@@ -202,6 +199,7 @@ export const INITIAL_SCHEDULE_DATA = [
     }
 ];
 
+// LIVE MATCH CONFIGURATION
 export const LIVE_MATCH: Match = {
   ...EMPTY_MATCH_BASE,
   id: 'm_live_01',
@@ -210,12 +208,12 @@ export const LIVE_MATCH: Match = {
   scoreA: 0,
   scoreB: 0,
   isLive: true,
-  // TODO: Remplacer par le lien du stream OBS / Twitch
-  videoUrl: '', 
+  videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
 };
 
 export const HIGHLIGHTS_DATA: HighlightVideo[] = [];
 
+// BRACKET STRUCTURE: ONLY FINAL DAY (2 SEMIS, 1 FINAL)
 export const BRACKET_DATA: BracketMatch[] = [
     { id: 'bs1', round: 'Semi', teamA: findTeam('t_semi_jaune'), teamB: findTeam('t_semi_bleu'), scoreA: 0, scoreB: 0 }, 
     { id: 'bs2', round: 'Semi', teamA: findTeam('t_semi_vert'), teamB: findTeam('t_semi_orange'), scoreA: 0, scoreB: 0 },

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Calendar, MapPin, ArrowRight } from 'lucide-react';
+import { Trophy, Calendar, MapPin, ArrowRight, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 
@@ -76,9 +76,11 @@ function MatchRow({ match }: any) {
     const isLive = match.status === 'live';
     const isFinished = match.status === 'finished';
 
-    // CORRECTION CRITIQUE: Support des deux formats (DB vs Mock)
     const teamA = match.team_a || match.teamA;
     const teamB = match.team_b || match.teamB;
+
+    // Déterminer le gagnant
+    const winner = isFinished ? (match.score_team_a > match.score_team_b ? 'A' : match.score_team_b > match.score_team_a ? 'B' : null) : null;
 
     if (!teamA || !teamB) return null;
 
@@ -100,8 +102,11 @@ function MatchRow({ match }: any) {
                 {/* Matchup */}
                 <div className="flex-1 p-4 md:p-6 flex items-center justify-between gap-4">
                     {/* Team A */}
-                    <div className="flex-1 flex items-center justify-end gap-3 md:gap-6 text-right">
-                        <span className="font-black italic uppercase text-sm md:text-xl leading-none">{teamA.name}</span>
+                    <div className={`flex-1 flex items-center justify-end gap-3 md:gap-6 text-right ${winner === 'B' ? 'opacity-50 grayscale' : ''}`}>
+                        <div className="flex flex-col items-end">
+                            <span className="font-black italic uppercase text-sm md:text-xl leading-none">{teamA.name}</span>
+                            {winner === 'A' && <span className="text-[10px] font-bold text-green-500 uppercase flex items-center gap-1 mt-1">Gagnant <CheckCircle size={10}/></span>}
+                        </div>
                         <img src={teamA.logoUrl} className="w-10 h-10 md:w-16 md:h-16 rounded-full bg-black object-cover border border-white/10" onError={(e) => e.currentTarget.style.display='none'}/>
                     </div>
 
@@ -117,9 +122,12 @@ function MatchRow({ match }: any) {
                     </div>
 
                     {/* Team B */}
-                    <div className="flex-1 flex items-center justify-start gap-3 md:gap-6 text-left">
+                    <div className={`flex-1 flex items-center justify-start gap-3 md:gap-6 text-left ${winner === 'A' ? 'opacity-50 grayscale' : ''}`}>
                         <img src={teamB.logoUrl} className="w-10 h-10 md:w-16 md:h-16 rounded-full bg-black object-cover border border-white/10" onError={(e) => e.currentTarget.style.display='none'}/>
-                        <span className="font-black italic uppercase text-sm md:text-xl leading-none">{teamB.name}</span>
+                        <div className="flex flex-col items-start">
+                            <span className="font-black italic uppercase text-sm md:text-xl leading-none">{teamB.name}</span>
+                            {winner === 'B' && <span className="text-[10px] font-bold text-green-500 uppercase flex items-center gap-1 mt-1"><CheckCircle size={10}/> Gagnant</span>}
+                        </div>
                     </div>
                 </div>
                 

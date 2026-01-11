@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 const Footer: React.FC = () => {
-  // Logos Partenaires Locaux
+  // Placeholder logos - À remplacer par les vrais URLs
   const sponsors = [
     { name: 'Hoops Game', url: '/partners/logo_hoops_game.jpg' },
     { name: 'Omega Sport', url: '/partners/logo_omega_sport.jpg' }
@@ -16,6 +16,7 @@ const Footer: React.FC = () => {
             {/* Event Logo Area */}
             <div className="flex flex-col items-center md:items-start gap-4">
                 <div className="flex items-center gap-2">
+                     {/* Logo Evenement - Placeholder texte stylisé si pas d'image */}
                      <span className="text-4xl font-display font-bold italic tracking-wide text-white">
                         HOOPS <span className="text-hoops-yellow">BATTLE</span>
                      </span>
@@ -39,13 +40,14 @@ const Footer: React.FC = () => {
             <p className="text-center text-[10px] font-bold uppercase text-gray-600 mb-6 tracking-[0.2em]">
                 Partenaires Officiels
             </p>
-            <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-70 hover:opacity-100 transition-opacity duration-500">
+            <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-50 hover:opacity-100 transition-opacity duration-500 grayscale hover:grayscale-0">
                 {sponsors.map((s, i) => (
                     <div key={i} className="h-8 md:h-12 w-auto flex items-center justify-center">
+                        {/* On utilise des filtres CSS pour rendre les logos blancs par défaut */}
                         <img 
                             src={s.url} 
                             alt={s.name} 
-                            className="h-full w-auto object-contain rounded" 
+                            className="h-full w-auto object-contain" 
                         />
                     </div>
                 ))}

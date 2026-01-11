@@ -1,14 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { HighlightVideo } from '../types';
-import { Trash2, Heart } from 'lucide-react';
+import { Trash2, Volume2, VolumeX } from 'lucide-react';
 
 const Highlights: React.FC = () => {
   const [videos, setVideos] = useState<HighlightVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const videoRefs = React.useRef<{ [key: string]: HTMLVideoElement | null }>({});
 
   useEffect(() => {
     fetchVideos();
@@ -18,96 +17,27 @@ const Highlights: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const video = entry.target as HTMLVideoElement;
-          // Si la vidéo est visible à >50% et que c'est une vidéo HTML5 (pas iframe Youtube)
-          if (entry.intersectionRatio > 0.6) {
-             video.play().catch(() => {}); 
-          } else {
-             video.pause();
-          }
-        });
-      },
-      { threshold: 0.6 }
-    );
-
-    // Observe all video elements
-    Object.values(videoRefs.current).forEach((el) => {
-      if (el) observer.observe(el);
-    });
-
-    return () => observer.disconnect();
-  }, [videos]);
-
   const fetchVideos = async () => {
         const data = await api.content.getHighlights();
-        // Filtrer les URLs vides
         setVideos(data.filter(v => v.videoUrl));
         setLoading(false);
-  };
-
-  const handleRef = (id: string) => (el: HTMLVideoElement | null) => {
-    videoRefs.current[id] = el;
-  };
-
-  const toggleMute = (e: React.MouseEvent, id: string) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const video = videoRefs.current[id];
-      if (video) {
-          video.muted = !video.muted;
-      }
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
       e.preventDefault();
       e.stopPropagation();
-      e.nativeEvent.stopImmediatePropagation();
-      
       if(window.confirm("Voulez-vous vraiment supprimer cette vidéo du feed ?")) {
-          // Optimistic update
           setVideos(prev => prev.filter(v => v.id !== id));
-          
-          // CORRECTION: On passe l'ID directement sans parseInt pour supporter les UUIDs ou formats mixtes
           const { error } = await supabase.from('highlights').delete().eq('id', id);
-          
-          if (error) {
-              alert("Erreur de suppression (DB): " + error.message);
-              // Revert if error
-              fetchVideos();
-          }
+          if (error) fetchVideos();
       }
   };
-
-  const isVideoFile = (url?: string) => {
-      if (!url) return false;
-      const u = url.toLowerCase();
-      return u.includes('.mp4') || u.includes('.mov') || u.includes('.webm') || u.includes('blob:');
-  }
-
-  const isYoutube = (url?: string) => {
-      if (!url) return false;
-      const u = url.toLowerCase();
-      return u.includes('youtube') || u.includes('youtu.be');
-  }
-
-  const getYoutubeId = (url: string) => {
-      return url.replace('https://youtu.be/','')
-                .replace('https://www.youtube.com/watch?v=','')
-                .replace('https://youtube.com/shorts/','')
-                .split('?')[0]
-                .split('&')[0];
-  }
 
   if (loading) return <div className="h-screen bg-black flex items-center justify-center text-white">Chargement du feed...</div>;
 
   return (
-    // Utilisation de 100dvh pour le mobile et padding bottom pour éviter le dock
-    <div className="fixed inset-0 top-16 z-10 bg-black">
-      <div className="h-[calc(100dvh-64px)] w-full overflow-y-scroll snap-y snap-mandatory bg-black no-scrollbar pb-20">
+    <div className="fixed inset-0 top-16 bottom-16 z-10 bg-black">
+      <div className="h-full w-full overflow-y-scroll snap-y snap-mandatory bg-black no-scrollbar pb-0">
         {videos.map((video) => (
           <div key={video.id} className="h-full w-full snap-start relative flex items-center justify-center bg-gray-900 border-b border-white/10 group">
             
@@ -123,63 +53,7 @@ const Highlights: React.FC = () => {
             )}
 
             <div className="relative w-full h-full max-w-md mx-auto bg-black flex items-center justify-center">
-                {isYoutube(video.videoUrl) ? (
-                    <div className="w-full aspect-video pointer-events-auto z-30">
-                        <iframe 
-                            width="100%" 
-                            height="100%" 
-                            src={`https://www.youtube.com/embed/${getYoutubeId(video.videoUrl)}?autoplay=0&controls=1&modestbranding=1&rel=0&playsinline=1`}
-                            title={video.title}
-                            frameBorder="0"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                            referrerPolicy="no-referrer"
-                        ></iframe>
-                    </div>
-                ) : isVideoFile(video.videoUrl) ? (
-                   <>
-                       <video 
-                          ref={handleRef(video.id)}
-                          src={video.videoUrl} 
-                          className="w-full h-full object-contain bg-black"
-                          loop 
-                          muted={true}
-                          playsInline
-                          controls
-                          preload="metadata"
-                        />
-                   </>
-                ) : (
-                    <img 
-                        src={video.videoUrl} 
-                        className="w-full h-full object-cover" 
-                        alt={video.title}
-                        onError={(e) => e.currentTarget.style.display = 'none'} 
-                    />
-                )}
-                
-                {/* Overlay UI (Non-clickable pour laisser la place aux contrôles Youtube si besoin) */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none flex flex-col justify-end p-6 z-20">
-                   
-                   <div className="flex flex-col items-end absolute right-4 bottom-20 gap-6 pointer-events-auto">
-                      <button className="flex flex-col items-center gap-1 group/btn cursor-default">
-                          <div className="bg-white/10 p-3 rounded-full backdrop-blur-sm group-hover/btn:bg-red-500 transition-colors">
-                              <Heart className="w-6 h-6 text-white" fill="white" />
-                          </div>
-                          <span className="text-xs font-bold text-white">{video.likes}</span>
-                      </button>
-                   </div>
-
-                   <div className="pr-16 mb-8 md:mb-0 pointer-events-none">
-                       <h3 className="text-white font-bold text-lg mb-2 leading-tight drop-shadow-md">{video.title}</h3>
-                       <div className="flex items-center gap-2">
-                           <div className="w-6 h-6 rounded-full bg-hoops-yellow flex items-center justify-center text-[10px] text-black font-bold uppercase">
-                              {video.author.substring(0,2)}
-                           </div>
-                           <span className="text-sm font-bold text-hoops-yellow">{video.author}</span>
-                       </div>
-                   </div>
-                </div>
+                <MediaItem video={video} />
             </div>
           </div>
         ))}
@@ -192,5 +66,128 @@ const Highlights: React.FC = () => {
     </div>
   );
 };
+
+// Sous-composant avec INTERSECTION OBSERVER pour gérer lecture unique
+const MediaItem = ({ video }: { video: HighlightVideo }) => {
+    const [isLoaded, setIsLoaded] = useState(false);
+    const [hasError, setHasError] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const options = {
+            root: null,
+            rootMargin: '0px',
+            threshold: 0.6 // Doit être 60% visible pour jouer
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (videoRef.current) {
+                    if (entry.isIntersecting) {
+                        videoRef.current.play().catch(() => {
+                            // Autoplay failed (user needs to interact)
+                            setIsMuted(true); 
+                        });
+                        videoRef.current.muted = false; // Tente d'activer le son
+                        setIsMuted(false);
+                    } else {
+                        videoRef.current.pause();
+                        videoRef.current.currentTime = 0;
+                    }
+                }
+            });
+        }, options);
+
+        if (containerRef.current) {
+            observer.observe(containerRef.current);
+        }
+
+        return () => {
+            if (containerRef.current) observer.unobserve(containerRef.current);
+        };
+    }, []);
+
+    const isVideo = (url?: string) => {
+        if (!url) return false;
+        const u = url.toLowerCase();
+        return u.includes('.mp4') || u.includes('.mov') || u.includes('.webm') || u.includes('blob:');
+    }
+
+    const toggleMute = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (videoRef.current) {
+            videoRef.current.muted = !videoRef.current.muted;
+            setIsMuted(videoRef.current.muted);
+        }
+    };
+
+    if (!isVideo(video.videoUrl)) {
+        return (
+            <>
+                <img 
+                    src={video.videoUrl} 
+                    className={`w-full h-full object-cover transition-opacity duration-500 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+                    alt={video.title}
+                    onLoad={() => setIsLoaded(true)}
+                    onError={() => { setHasError(true); setIsLoaded(true); }}
+                />
+                <OverlayInfo video={video} />
+            </>
+        )
+    }
+
+    return (
+        <div ref={containerRef} className="w-full h-full relative">
+            {!isLoaded && !hasError && (
+                <div className="absolute inset-0 bg-gray-900 z-10 flex flex-col items-center justify-center gap-4">
+                     <div className="w-12 h-12 border-4 border-hoops-yellow border-t-transparent rounded-full animate-spin"></div>
+                </div>
+            )}
+
+            <video 
+                ref={videoRef}
+                src={video.videoUrl} 
+                className={`w-full h-full object-cover transition-opacity duration-500 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+                loop 
+                playsInline
+                preload="auto"
+                onLoadedData={() => setIsLoaded(true)}
+                onError={() => { setHasError(true); setIsLoaded(true); }}
+                onClick={toggleMute}
+            />
+
+            <button 
+                onClick={toggleMute}
+                className="absolute top-4 left-4 z-30 bg-black/50 p-2 rounded-full text-white backdrop-blur-sm"
+            >
+                {isMuted ? <VolumeX size={20}/> : <Volume2 size={20}/>}
+            </button>
+
+            <OverlayInfo video={video} />
+            
+            {hasError && (
+                 <div className="absolute inset-0 flex items-center justify-center text-gray-500 bg-black z-0">
+                     Vidéo indisponible
+                 </div>
+            )}
+        </div>
+    );
+}
+
+const OverlayInfo = ({ video }: { video: HighlightVideo }) => (
+    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent pointer-events-none flex flex-col justify-end p-6 z-20">
+       <div className="pr-16 mb-8 md:mb-0 pointer-events-none">
+           <h3 className="text-white font-bold text-lg mb-2 leading-tight drop-shadow-md">{video.title}</h3>
+           <div className="flex items-center gap-2">
+               <div className="w-6 h-6 rounded-full bg-hoops-yellow flex items-center justify-center text-[10px] text-black font-bold uppercase">
+                  {video.author.substring(0,2)}
+               </div>
+               <span className="text-sm font-bold text-hoops-yellow">{video.author}</span>
+           </div>
+       </div>
+    </div>
+);
 
 export default Highlights;

@@ -2,6 +2,7 @@
   "name": "hoops-game-hub",
   "private": true,
   "version": "0.0.0",
+  "author": "Doc <dev@hoops.game>",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +11,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
+    "@vercel/analytics": "^1.6.1",
     "build": "^0.1.4",
     "lucide-react": "0.292.0",
     "react": "18.2.0",

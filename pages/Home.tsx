@@ -1,19 +1,31 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { Camera, Plus, ArrowRight, Trophy } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { Camera, Upload, Plus, ArrowRight, Trophy, X, User, Calendar, Smile } from 'lucide-react';
 import { api } from '../services/api'; 
 import { Team, Player } from '../types';
-import { UploadModal } from '../components/UploadModal';
 
 const Home: React.FC = () => {
   const [highlights, setHighlights] = useState<any[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
-  const [matches, setMatches] = useState<any[]>([]);
+  const [matches, setMatches] = useState<any[]>([]); // Pour la liste déroulante
 
   const [brokenMediaIds, setBrokenMediaIds] = useState<Set<number>>(new Set());
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+
+  // Upload Modal State
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadStep, setUploadStep] = useState<'select' | 'details'>('select');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  
+  // Upload Meta Data
+  const [videoTitle, setVideoTitle] = useState('');
+  const [userName, setUserName] = useState(''); // NEW: Custom User Name
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string>('');
+  const [selectedMatchId, setSelectedMatchId] = useState<string>('');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchHighlights();
@@ -49,6 +61,7 @@ const Home: React.FC = () => {
   async function fetchTeamsAndPlayers() {
       const data = await api.teams.getAll();
       setTeams(data);
+      // Flatten players for dropdown
       const players = data.flatMap(t => t.roster);
       setAllPlayers(players);
   }
@@ -57,12 +70,76 @@ const Home: React.FC = () => {
       const { data } = await supabase
         .from('matches')
         .select('id, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name), start_time')
-        .order('start_time', { ascending: false });
+        .order('start_time', { ascending: false }); // Plus récents en premier
       if (data) setMatches(data);
   }
 
   const handleMediaError = (id: number) => {
       setBrokenMediaIds(prev => new Set(prev).add(id));
+  };
+
+  // --- UPLOAD FLOW ---
+
+  const openUploadModal = () => {
+      setShowUploadModal(true);
+      setUploadStep('select');
+      setUploadFile(null);
+      setVideoTitle('');
+      setUserName('');
+      setSelectedPlayerId('');
+      setSelectedMatchId('');
+  };
+
+  const handleFileSelect = (event: any) => {
+      const file = event.target.files[0];
+      if (file) {
+          setUploadFile(file);
+          setUploadStep('details');
+      }
+  };
+
+  const handleFinalUpload = async () => {
+    try {
+      if (!isSupabaseConfigured()) {
+          alert("Mode hors ligne : Upload impossible.");
+          return;
+      }
+      if (!uploadFile) return;
+      if (!videoTitle.trim()) {
+          alert("Veuillez donner un titre à votre vidéo.");
+          return;
+      }
+
+      setUploading(true);
+
+      const fileExt = uploadFile.name.split('.').pop();
+      const fileName = `fan_${Date.now()}.${fileExt}`;
+      const filePath = `fan_uploads/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage.from('hoops-media').upload(filePath, uploadFile);
+      if (uploadError) throw new Error("Erreur Storage: " + uploadError.message);
+
+      const { data: { publicUrl } } = supabase.storage.from('hoops-media').getPublicUrl(filePath);
+
+      const { error: dbError } = await supabase.from('highlights').insert({
+          title: videoTitle,
+          media_url: publicUrl,
+          media_type: uploadFile.type.startsWith('video') ? 'video' : 'image',
+          status: 'pending', 
+          user_name: userName.trim() || 'Fan Anonyme', // Use Custom Name
+          player_id: selectedPlayerId ? parseInt(selectedPlayerId) : null,
+          match_id: selectedMatchId ? parseInt(selectedMatchId) : null
+      });
+
+      if (dbError) throw new Error("Erreur DB: " + dbError.message);
+
+      alert("✅ Contenu envoyé ! Il sera visible après validation.");
+      setShowUploadModal(false);
+    } catch (error: any) {
+      alert("❌ Erreur : " + error.message);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const isVideo = (url: string) => url && (url.includes('.mp4') || url.includes('.mov') || url.includes('.webm'));
@@ -71,6 +148,7 @@ const Home: React.FC = () => {
   return (
     <div className="flex flex-col gap-12 pb-12 pt-24 px-4 max-w-7xl mx-auto font-sans relative">
       
+      {/* HERO SECTION */}
       <section className="relative rounded-3xl overflow-hidden min-h-[500px] flex items-end shadow-2xl group">
          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1519861531473-9200262188bf?q=80&w=2071&auto=format&fit=crop')] bg-cover bg-center transition-transform duration-1000 group-hover:scale-105"></div>
          <div className="absolute inset-0 bg-gradient-to-t from-hoops-bg via-hoops-bg/80 to-transparent"></div>
@@ -106,16 +184,18 @@ const Home: React.FC = () => {
          </div>
       </section>
 
+      {/* PARTNERS STRIP */}
       <section className="border-y border-white/5 py-6 overflow-hidden">
           <div className="max-w-7xl mx-auto flex items-center justify-center md:justify-between gap-8 flex-wrap opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 hidden md:block">Partenaires Officiels</span>
              <div className="flex items-center gap-8 md:gap-16">
-                 <img src="/partners/logo_hoops_game.jpg" className="h-8 md:h-12 w-auto object-contain rounded opacity-80 hover:opacity-100 transition-opacity" alt="Hoops Game" />
-                 <img src="/partners/logo_omega_sport.jpg" className="h-8 md:h-12 w-auto object-contain rounded opacity-80 hover:opacity-100 transition-opacity" alt="Omega Sport" />
+                 <img src="/partners/logo_hoops_game.jpg" className="h-6 md:h-8 w-auto" alt="Hoops Game" />
+                 <img src="/partners/logo_omega_sport.jpg" className="h-6 md:h-8 w-auto" alt="Omega Sport" />
              </div>
           </div>
       </section>
 
+      {/* --- LIVE FEED --- */}
       <section>
           <div className="flex items-center justify-between mb-6">
              <h2 className="text-3xl font-display font-bold uppercase italic text-white flex items-center gap-3">
@@ -123,7 +203,7 @@ const Home: React.FC = () => {
                  Le Feed
              </h2>
              <button 
-                onClick={() => setIsUploadModalOpen(true)}
+                onClick={openUploadModal}
                 className="flex items-center gap-2 px-4 py-2 rounded-full font-bold uppercase tracking-wider text-xs cursor-pointer transition-all bg-hoops-primary text-white hover:bg-blue-600 shadow-lg"
              >
                 <Plus size={14}/> Poster une Action
@@ -145,11 +225,11 @@ const Home: React.FC = () => {
                             src={media.video_url || media.media_url} 
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
                             alt="Highlight"
-                            loading="lazy"
                             onError={() => handleMediaError(media.id)}
                         />
                     )}
                     
+                    {/* Clean Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-100 flex flex-col justify-end p-4">
                         <div className="flex items-center gap-2 mb-1">
                              <span className="text-[10px] font-bold text-hoops-yellow uppercase bg-black/40 px-2 rounded">
@@ -159,6 +239,7 @@ const Home: React.FC = () => {
                         <h3 className="text-sm font-bold text-white leading-tight mb-1">{media.title || 'Action du match'}</h3>
                         
                         <div className="flex flex-wrap gap-2 mt-2">
+                             {/* Tags */}
                              {media.player?.name && (
                                  <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded text-white backdrop-blur-sm">
                                      @{media.player.name}
@@ -182,6 +263,7 @@ const Home: React.FC = () => {
           </div>
       </section>
 
+      {/* TEAMS STRIP */}
       <section className="w-full">
          <div className="flex justify-between items-end mb-6 px-2">
             <h2 className="text-3xl font-display font-bold uppercase italic text-white">Équipes en lice</h2>
@@ -196,7 +278,6 @@ const Home: React.FC = () => {
                         src={team.logoUrl} 
                         className="w-12 h-12 rounded-full object-cover bg-white/5 border border-white/10" 
                         alt={team.name}
-                        loading="lazy"
                         onError={(e) => {
                             (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(team.name)}&background=random&color=fff`;
                         }}
@@ -211,13 +292,121 @@ const Home: React.FC = () => {
          </div>
       </section>
 
-      <UploadModal 
-        isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
-        players={allPlayers}
-        matches={matches}
-        onUploadSuccess={() => fetchHighlights()}
-      />
+      {/* UPLOAD MODAL */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-hoops-card border border-white/20 rounded-2xl w-full max-w-md overflow-hidden relative shadow-2xl">
+                <button onClick={() => setShowUploadModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white">
+                    <X size={24}/>
+                </button>
+
+                <div className="p-6">
+                    <h2 className="text-xl font-display font-bold uppercase italic mb-6">Poster sur le Feed</h2>
+                    
+                    {uploadStep === 'select' ? (
+                        <div 
+                            className="border-2 border-dashed border-white/20 rounded-xl p-12 text-center hover:bg-white/5 transition-colors cursor-pointer group"
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                                <Upload className="text-hoops-yellow w-8 h-8"/>
+                            </div>
+                            <p className="font-bold text-white mb-2">Cliquez pour choisir</p>
+                            <p className="text-xs text-gray-400">Vidéo ou Photo (Max 50Mo)</p>
+                            <input 
+                                type="file" 
+                                ref={fileInputRef} 
+                                className="hidden" 
+                                accept="video/*,image/*" 
+                                onChange={handleFileSelect}
+                            />
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                             {/* Preview Filename */}
+                             <div className="bg-white/5 px-4 py-2 rounded text-xs text-gray-400 truncate border border-white/10 flex items-center gap-2">
+                                <Upload size={12}/> {uploadFile?.name}
+                             </div>
+
+                             <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Titre de l'action</label>
+                                <input 
+                                    type="text" 
+                                    value={videoTitle}
+                                    onChange={(e) => setVideoTitle(e.target.value)}
+                                    placeholder="Ex: Dunk monstrueux de..." 
+                                    className="w-full bg-black/50 border border-white/20 rounded p-3 text-white focus:border-hoops-primary focus:outline-none"
+                                    autoFocus
+                                />
+                             </div>
+
+                             <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-1 flex items-center gap-2">
+                                    <Smile size={12}/> Votre Nom (Optionnel)
+                                </label>
+                                <input 
+                                    type="text" 
+                                    value={userName}
+                                    onChange={(e) => setUserName(e.target.value)}
+                                    placeholder="Pseudo / Nom" 
+                                    className="w-full bg-black/50 border border-white/20 rounded p-3 text-white focus:border-hoops-primary focus:outline-none"
+                                />
+                             </div>
+
+                             <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-1 flex items-center gap-2">
+                                    <User size={12}/> Mentionner un joueur (Optionnel)
+                                </label>
+                                <select 
+                                    value={selectedPlayerId} 
+                                    onChange={(e) => setSelectedPlayerId(e.target.value)}
+                                    className="w-full bg-black/50 border border-white/20 rounded p-3 text-white focus:border-hoops-primary focus:outline-none appearance-none"
+                                >
+                                    <option value="">-- Aucun --</option>
+                                    {allPlayers.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name} (#{p.number})</option>
+                                    ))}
+                                </select>
+                             </div>
+
+                             <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-1 flex items-center gap-2">
+                                    <Calendar size={12}/> Mentionner un match (Optionnel)
+                                </label>
+                                <select 
+                                    value={selectedMatchId} 
+                                    onChange={(e) => setSelectedMatchId(e.target.value)}
+                                    className="w-full bg-black/50 border border-white/20 rounded p-3 text-white focus:border-hoops-primary focus:outline-none appearance-none"
+                                >
+                                    <option value="">-- Aucun --</option>
+                                    {matches.map(m => (
+                                        <option key={m.id} value={m.id}>
+                                            {m.team_a?.name || '?'} vs {m.team_b?.name || '?'} ({new Date(m.start_time).toLocaleDateString()})
+                                        </option>
+                                    ))}
+                                </select>
+                             </div>
+
+                             <button 
+                                onClick={handleFinalUpload}
+                                disabled={uploading}
+                                className="w-full bg-hoops-primary text-white font-bold uppercase py-4 rounded-xl hover:bg-blue-600 transition-colors mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                             >
+                                {uploading ? 'Envoi en cours...' : 'Publier'}
+                             </button>
+                             
+                             <button 
+                                onClick={() => setUploadStep('select')}
+                                className="w-full text-xs text-gray-500 hover:text-white mt-2"
+                             >
+                                Choisir un autre fichier
+                             </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
 
     </div>
   );

@@ -6,13 +6,13 @@ export interface Player {
   position: 'PG' | 'SG' | 'SF' | 'PF' | 'C';
   height: string;
   stats: {
-    ppg: number;
-    rpg: number;
-    apg: number;
+    ppg: number; // Points per game
+    rpg: number; // Rebounds per game
+    apg: number; // Assists per game
   };
   imageUrl: string;
-  mvpVotes?: number;
-  is_on_court?: boolean;
+  mvpVotes?: number; // For the MVP feature
+  is_on_court?: boolean; // NEW: Status for Live Court visualization
 }
 
 export interface Team {
@@ -39,14 +39,18 @@ export interface Match {
   teamB: Team;
   scoreA: number;
   scoreB: number;
-  quarter: number;
-  timeLeft: string;
+  quarter: number; // 1-4, or 5+ for OT
+  timeLeft: string; // Format MM:SS
   isLive: boolean;
   events: MatchEvent[];
   videoUrl?: string;
-  youtubeId?: string;
-  activePlayersA: string[];
-  activePlayersB: string[];
+  youtubeId?: string; // ID Youtube for embedding
+  socialLink?: string; // NEW: Lien de secours (Insta/Tiktok)
+  socialLinkText?: string; // NEW: Message personnalisé pour le lien de secours
+  activePlayersA: string[]; // List of Player IDs currently on court
+  activePlayersB: string[]; // List of Player IDs currently on court
+  
+  // NEW FIELDS FOR CMS
   reviewTitle?: string;
   reviewText?: string;
   interviewVideoUrl?: string;

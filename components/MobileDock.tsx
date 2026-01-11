@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Users, Trophy, Shield, Gamepad2, FileText } from 'lucide-react';
+import { Home, Users, Trophy, Shield, Gamepad2, FileText, Crown } from 'lucide-react';
 
 const MobileDock: React.FC = () => {
   const location = useLocation();
@@ -13,9 +13,10 @@ const MobileDock: React.FC = () => {
   const navItems = [
     { path: '/', label: 'Live', icon: <Home size={22} /> },
     { path: '/schedule', label: 'Matchs', icon: <Trophy size={22} /> },
+    // On remplace Feed par Leaderboard pour mettre en avant le classement
+    { path: '/leaderboard', label: 'Top', icon: <Crown size={22} /> },
     { path: '/highlights', label: 'Feed', icon: <Gamepad2 size={22} /> },
     { path: '/teams', label: 'Équipes', icon: <Users size={22} /> },
-    { path: '/rules', label: 'Règles', icon: <FileText size={22} /> },
   ];
 
   return (

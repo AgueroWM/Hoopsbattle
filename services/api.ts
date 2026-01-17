@@ -4,8 +4,6 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 // --- UTILITAIRES DE MAPPING (Pour convertir les données brutes DB en objets utilisables) ---
 
-// TODO: Refactor this mapping logic later. It's a bit messy but works for now.
-// Ideally we should use a proper SQL join but time was short. - Doc
 const mapPlayer = (data: any): Player => ({
   id: data.id?.toString() || '0',
   name: data.name || 'Inconnu',

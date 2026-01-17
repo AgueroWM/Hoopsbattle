@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Trophy, FileText, Activity, Crown } from 'lucide-react';
 
 const Navbar: React.FC = () => {
   const location = useLocation();
+  const [logoError, setLogoError] = useState(false);
 
   const isActive = (path: string) => 
     location.pathname === path 
@@ -16,26 +17,24 @@ const Navbar: React.FC = () => {
           
           <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-start">
             <Link to="/" className="flex-shrink-0 group flex items-center gap-3">
-              {/* REMPLACEMENT PAR LE LOGO IMAGE */}
-              <img 
-                src="/logo.png" 
-                alt="HOOPS BATTLE" 
-                className="h-10 w-auto object-contain"
-                onError={(e) => {
-                    // Fallback texte si l'image n'existe pas encore
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                }}
-              />
-              <div className="hidden flex items-center gap-1">
-                  <span className="text-3xl font-display font-bold italic tracking-wide text-white group-hover:text-hoops-yellow transition-colors">
-                    HOOPS
-                  </span>
-                  <div className="h-6 w-0.5 bg-white/20 rotate-12"></div>
-                  <span className="text-xl font-display text-hoops-yellow tracking-widest uppercase">
-                    BATTLE
-                  </span>
-              </div>
+              {!logoError ? (
+                <img 
+                  src="/logo.png" 
+                  alt="HOOPS BATTLE" 
+                  className="h-10 w-auto object-contain"
+                  onError={() => setLogoError(true)}
+                />
+              ) : (
+                <div className="flex items-center gap-1">
+                    <span className="text-3xl font-display font-bold italic tracking-wide text-white group-hover:text-hoops-yellow transition-colors">
+                      HOOPS
+                    </span>
+                    <div className="h-6 w-0.5 bg-white/20 rotate-12"></div>
+                    <span className="text-xl font-display text-hoops-yellow tracking-widest uppercase">
+                      BATTLE
+                    </span>
+                </div>
+              )}
             </Link>
 
             <div className="hidden md:flex items-center space-x-6 text-sm uppercase tracking-wide font-medium">

@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Users, Camera, Edit3, Save, RefreshCw, ArrowLeft, Search, Plus, Trash2 } from 'lucide-react';
 import PlayerModal from '../components/PlayerModal';
+import SmoothImage from '../components/SmoothImage';
 
 const StatsCMS: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -28,7 +29,7 @@ const StatsCMS: React.FC = () => {
   const [viewingPlayer, setViewingPlayer] = useState<any>(null);
 
   useEffect(() => {
-    fetchTeams();
+    fetchTeamsAndStats();
     const auth = sessionStorage.getItem('hoops_admin_auth');
     setIsAdmin(auth === 'true');
   }, [refreshTrigger]);
@@ -41,13 +42,59 @@ const StatsCMS: React.FC = () => {
       }
   }, [searchTerm, teams]);
 
-  const fetchTeams = async () => {
-      const data = await api.teams.getAll();
-      setTeams(data);
+  const fetchTeamsAndStats = async () => {
+      setLoading(true);
+      // 1. Fetch Teams
+      const teamsList = await api.teams.getAll();
+      
+      // 2. Fetch Finished Matches for precise win/loss Calc
+      const { data: finishedMatches } = await supabase
+        .from('matches')
+        .select('team_a_id, team_b_id, score_team_a, score_team_b')
+        .eq('status', 'finished');
+
+      const teamStats = new Map<string, { wins: number, losses: number }>();
+
+      teamsList.forEach(t => {
+          teamStats.set(t.id, { wins: 0, losses: 0 });
+      });
+
+      if (finishedMatches) {
+          finishedMatches.forEach((m: any) => {
+              const teamAId = String(m.team_a_id);
+              const teamBId = String(m.team_b_id);
+              
+              const statsA = teamStats.get(teamAId) || { wins: 0, losses: 0 };
+              const statsB = teamStats.get(teamBId) || { wins: 0, losses: 0 };
+
+              if (m.score_team_a > m.score_team_b) {
+                  statsA.wins++;
+                  statsB.losses++;
+              } else if (m.score_team_b > m.score_team_a) {
+                  statsB.wins++;
+                  statsA.losses++;
+              }
+
+              teamStats.set(teamAId, statsA);
+              teamStats.set(teamBId, statsB);
+          });
+      }
+
+      // Merge stats into teams
+      const enrichedTeams = teamsList.map(t => {
+          const stats = teamStats.get(t.id) || { wins: 0, losses: 0 };
+          return {
+              ...t,
+              wins: stats.wins,
+              losses: stats.losses
+          };
+      });
+      
+      setTeams(enrichedTeams);
       setLoading(false);
       
       if (selectedTeam) {
-          const updated = data.find(t => t.id === selectedTeam.id);
+          const updated = enrichedTeams.find(t => t.id === selectedTeam.id);
           if (updated) setSelectedTeam(updated);
       }
   };
@@ -176,19 +223,22 @@ const StatsCMS: React.FC = () => {
             <div className="animate-fade-in">
                 <div className="relative mb-6">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20}/>
-                    <input type="text" placeholder="Rechercher une équipe..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-hoops-card border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-hoops-primary transition-colors" />
+                    {/* CORRECTION COULEUR FOND ET TEXTE */}
+                    <input type="text" placeholder="Rechercher une équipe..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-hoops-primary transition-colors" />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {filteredTeams.map(team => (
                         <div key={team.id} onClick={() => handleTeamClick(team)} className="bg-hoops-card border border-white/10 rounded-xl p-4 flex items-center gap-4 cursor-pointer hover:border-hoops-primary hover:bg-white/5 transition-all group">
-                            <div className="w-16 h-16 rounded-full bg-black border border-white/10 p-1 flex-shrink-0 group-hover:scale-110 transition-transform">
-                                <img src={team.logoUrl} className="w-full h-full object-cover rounded-full" />
+                            <div className="w-16 h-16 rounded-full bg-black border border-white/10 flex-shrink-0 group-hover:scale-110 transition-transform overflow-hidden">
+                                <SmoothImage src={team.logoUrl} className="w-full h-full" objectFit="cover" alt={team.name} />
                             </div>
                             <div className="min-w-0">
                                 <h3 className="font-bold text-lg uppercase italic truncate">{team.name}</h3>
                                 <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">{team.city}</p>
-                                <div className="mt-1 text-xs text-hoops-primary font-mono">{team.roster.length} Joueurs</div>
+                                <div className="mt-1 flex items-center gap-2 text-xs text-hoops-primary font-mono">
+                                    <span>{team.wins}V - {team.losses}D</span>
+                                </div>
                             </div>
                         </div>
                     ))}
@@ -202,8 +252,9 @@ const StatsCMS: React.FC = () => {
 
                 <div className="bg-hoops-card border border-white/10 rounded-2xl overflow-hidden">
                     <div className="p-8 md:p-12 bg-gradient-to-br from-black to-hoops-card border-b border-white/10 flex flex-col md:flex-row items-center gap-8 text-center md:text-left">
-                        <div className={`relative w-40 h-40 rounded-full border-4 border-white/10 bg-black shadow-2xl flex-shrink-0 group ${isEditMode ? 'cursor-pointer hover:border-green-500' : ''}`} onClick={() => isEditMode && handleUploadClick('team', selectedTeam.id)}>
-                            <img src={selectedTeam.logoUrl} className={`w-full h-full object-cover rounded-full transition-opacity ${uploadingId === selectedTeam.id ? 'opacity-50' : ''}`} />
+                        {/* GROS LOGO DETAIL */}
+                        <div className={`relative w-40 h-40 rounded-full border-4 border-white/10 bg-black shadow-2xl flex-shrink-0 group overflow-hidden ${isEditMode ? 'cursor-pointer hover:border-green-500' : ''}`} onClick={() => isEditMode && handleUploadClick('team', selectedTeam.id)}>
+                            <SmoothImage src={selectedTeam.logoUrl} className={`w-full h-full transition-opacity ${uploadingId === selectedTeam.id ? 'opacity-50' : ''}`} objectFit="cover" alt={selectedTeam.name} />
                             {isEditMode && (<div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 rounded-full transition-all"><Camera className="text-white w-10 h-10 drop-shadow-lg" /></div>)}
                             {uploadingId === selectedTeam.id && (<div className="absolute inset-0 flex items-center justify-center bg-black/80 rounded-full z-20"><RefreshCw className="animate-spin text-hoops-yellow w-10 h-10"/></div>)}
                         </div>
@@ -232,8 +283,8 @@ const StatsCMS: React.FC = () => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             {selectedTeam.roster.map(player => (
                                 <div key={player.id} className="bg-hoops-bg border border-white/5 rounded-xl p-4 flex items-center gap-4 hover:border-white/20 transition-all group relative overflow-hidden cursor-pointer" onClick={() => handlePlayerClick(player)}>
-                                    <div className={`relative w-16 h-16 rounded-full bg-black border border-white/10 flex-shrink-0 ${isEditMode ? 'hover:ring-2 ring-green-500' : ''}`}>
-                                        <img src={player.imageUrl} className={`w-full h-full object-cover rounded-full transition-opacity ${uploadingId === player.id ? 'opacity-50' : ''}`} />
+                                    <div className={`relative w-16 h-16 rounded-full bg-black border border-white/10 flex-shrink-0 overflow-hidden ${isEditMode ? 'hover:ring-2 ring-green-500' : ''}`}>
+                                        <SmoothImage src={player.imageUrl} className={`w-full h-full rounded-full transition-opacity ${uploadingId === player.id ? 'opacity-50' : ''}`} alt={player.name} />
                                         {isEditMode && (<div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 rounded-full transition-all"><Camera size={20} className="text-white"/></div>)}
                                         {uploadingId === player.id && (<div className="absolute inset-0 flex items-center justify-center bg-black/80 rounded-full z-20"><RefreshCw className="animate-spin text-hoops-yellow w-6 h-6"/></div>)}
                                     </div>

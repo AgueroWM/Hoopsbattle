@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { api } from '../services/api'
 import { Video, BarChart3, ArrowLeft, Image as ImageIcon, Calendar, MapPin, MessageCircle, Mic2, Star, Edit, Save, Shield, Zap } from 'lucide-react'
 import PlayerModal from '../components/PlayerModal'
+import SmoothImage from '../components/SmoothImage'
 
 export default function MatchDetails() {
   const { id } = useParams()
@@ -14,11 +15,6 @@ export default function MatchDetails() {
   
   const [voteStats, setVoteStats] = useState<any>({})
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
-  
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isEditingReview, setIsEditingReview] = useState(false);
-  const [editReviewText, setEditReviewText] = useState('');
-  const [editInterviewUrl, setEditInterviewUrl] = useState('');
   
   const [statsA, setStatsA] = useState<any[]>([])
   const [statsB, setStatsB] = useState<any[]>([])
@@ -34,11 +30,17 @@ export default function MatchDetails() {
             return;
         }
 
-        setMatch(matchData);
-        if (!isEditingReview) {
-            setEditReviewText(matchData.reviewText || '');
-            setEditInterviewUrl(matchData.interviewVideoUrl || '');
+        // --- FALLBACK ROSTER LOADER ---
+        if (matchData.team_a && matchData.team_a.roster.length === 0) {
+             const { data: pA } = await supabase.from('players').select('*').eq('team_id', matchData.team_a.id);
+             if (pA) matchData.team_a.roster = pA.map((p:any) => ({ ...p, imageUrl: p.avatar_url }));
         }
+        if (matchData.team_b && matchData.team_b.roster.length === 0) {
+             const { data: pB } = await supabase.from('players').select('*').eq('team_id', matchData.team_b.id);
+             if (pB) matchData.team_b.roster = pB.map((p:any) => ({ ...p, imageUrl: p.avatar_url }));
+        }
+
+        setMatch(matchData);
 
         if (matchData) {
             const { data: rawStats } = await supabase
@@ -61,7 +63,7 @@ export default function MatchDetails() {
             const merge = (roster: any[]) => {
                 if (!roster) return [];
                 return roster.map(player => {
-                    const s = rawStats?.find(rs => rs.player_id.toString() === player.id) || {};
+                    const s = rawStats?.find(rs => String(rs.player_id) === String(player.id)) || {};
                     return {
                         ...player,
                         points: s.points || 0,
@@ -70,6 +72,9 @@ export default function MatchDetails() {
                         fouls: s.fouls || 0,
                         blocks: s.blocks || 0,
                         steals: s.steals || 0,
+                        points_1_made: s.points_1_made || 0,
+                        points_2_made: s.points_2_made || 0,
+                        points_3_made: s.points_3_made || 0,
                     };
                 }).sort((a, b) => b.points - a.points);
             };
@@ -78,13 +83,11 @@ export default function MatchDetails() {
             setStatsB(merge(matchData.team_b.roster));
         }
         setLoading(false);
-  }, [id, isEditingReview]);
+  }, [id]);
 
   useEffect(() => {
     loadMatch();
-    const auth = sessionStorage.getItem('hoops_admin_auth');
-    setIsAdmin(auth === 'true');
-
+    
     const subscription = supabase
       .channel('public-match-details')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `id=eq.${id}` }, () => {
@@ -100,24 +103,6 @@ export default function MatchDetails() {
 
     return () => { supabase.removeChannel(subscription) };
   }, [id, loadMatch]);
-
-  const saveReviewChanges = async () => {
-      if(!id) return;
-      try {
-          const { error } = await supabase.from('matches').update({
-              review_text: editReviewText,
-              interview_video_url: editInterviewUrl
-          }).eq('id', id);
-
-          if (error) throw error;
-          
-          setIsEditingReview(false);
-          setMatch((prev: any) => ({ ...prev, reviewText: editReviewText, interviewVideoUrl: editInterviewUrl }));
-          alert("Contenu mis à jour !");
-      } catch (e: any) {
-          alert("Erreur de sauvegarde: " + e.message);
-      }
-  };
 
   if (loading) {
       return (
@@ -142,13 +127,15 @@ export default function MatchDetails() {
   }
 
   const allPlayersWithStats = [...statsA, ...statsB].sort((a, b) => b.points - a.points);
-  const isYoutube = (url: string) => url && (url.includes('youtube') || url.includes('youtu.be'));
-  const getYoutubeId = (url: string) => url.replace('https://youtu.be/','').replace('https://www.youtube.com/watch?v=','').split('?')[0];
+  
+  const handleOpenPlayer = (p: any, team: any) => {
+      setSelectedPlayer({ ...p, team: team });
+  };
 
   return (
     <div className="min-h-screen bg-[#020617] text-white pb-24 font-sans">
       
-      {selectedPlayer && <PlayerModal player={selectedPlayer} onClose={() => setSelectedPlayer(null)} />}
+      {selectedPlayer && <PlayerModal player={selectedPlayer} matchId={id} onClose={() => setSelectedPlayer(null)} />}
 
       <div className="relative pt-24 pb-12 overflow-hidden bg-gradient-to-b from-slate-900 to-[#020617]">
         <img src={match.team_a.logoUrl} className="absolute -left-20 top-20 w-96 h-96 opacity-5 blur-3xl pointer-events-none" />
@@ -192,8 +179,8 @@ export default function MatchDetails() {
 
                 <div className="flex flex-col md:flex-row items-center justify-between gap-8 mt-4">
                     <div className="flex flex-col items-center gap-4 flex-1">
-                        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-hoops-primary/20 bg-black p-1 shadow-[0_0_30px_rgba(59,130,246,0.2)]">
-                            <img src={match.team_a.logoUrl} className="w-full h-full object-cover rounded-full" onError={(e) => e.currentTarget.style.display='none'}/>
+                        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-hoops-primary/20 bg-black overflow-hidden shadow-[0_0_30px_rgba(59,130,246,0.2)]">
+                            <SmoothImage src={match.team_a.logoUrl} className="w-full h-full" objectFit="cover" alt={match.team_a.name}/>
                         </div>
                         <div className="text-center">
                             <h2 className="text-2xl md:text-4xl font-black italic uppercase leading-none mb-1">{match.team_a.name}</h2>
@@ -214,8 +201,8 @@ export default function MatchDetails() {
                     </div>
 
                     <div className="flex flex-col items-center gap-4 flex-1">
-                        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-hoops-yellow/20 bg-black p-1 shadow-[0_0_30px_rgba(244,255,95,0.2)]">
-                            <img src={match.team_b.logoUrl} className="w-full h-full object-cover rounded-full" onError={(e) => e.currentTarget.style.display='none'}/>
+                        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-hoops-yellow/20 bg-black overflow-hidden shadow-[0_0_30px_rgba(244,255,95,0.2)]">
+                            <SmoothImage src={match.team_b.logoUrl} className="w-full h-full" objectFit="cover" alt={match.team_b.name}/>
                         </div>
                         <div className="text-center">
                             <h2 className="text-2xl md:text-4xl font-black italic uppercase leading-none mb-1">{match.team_b.name}</h2>
@@ -237,8 +224,8 @@ export default function MatchDetails() {
 
         {activeTab === 'stats' && (
             <div className="grid md:grid-cols-2 gap-8 animate-fade-in">
-                <TeamStatsCard team={match.team_a} stats={statsA} color="blue" onPlayerClick={setSelectedPlayer} />
-                <TeamStatsCard team={match.team_b} stats={statsB} color="yellow" onPlayerClick={setSelectedPlayer} />
+                <TeamStatsCard team={match.team_a} stats={statsA} color="blue" onPlayerClick={(p: any) => handleOpenPlayer(p, match.team_a)} />
+                <TeamStatsCard team={match.team_b} stats={statsB} color="yellow" onPlayerClick={(p: any) => handleOpenPlayer(p, match.team_b)} />
             </div>
         )}
 
@@ -248,18 +235,18 @@ export default function MatchDetails() {
                     <div className="col-span-1 text-center">#</div>
                     <div className="col-span-5">Joueur</div>
                     <div className="col-span-2 text-right">PTS</div>
-                    <div className="col-span-4 text-right">VOTES (MVP/ATT/DEF)</div>
+                    <div className="col-span-4 text-right">VOTES</div>
                 </div>
                 <div className="divide-y divide-white/5">
                     {allPlayersWithStats.length > 0 ? allPlayersWithStats.slice(0, 10).map((player: any, idx) => (
-                        <div key={player.id} onClick={() => setSelectedPlayer(player)} className="p-3 grid grid-cols-12 gap-2 items-center hover:bg-white/5 transition-colors cursor-pointer">
+                        <div key={player.id} onClick={() => handleOpenPlayer(player, match.team_a.roster.some((rp:any) => rp.id === player.id) ? match.team_a : match.team_b)} className="p-3 grid grid-cols-12 gap-2 items-center hover:bg-white/5 transition-colors cursor-pointer">
                             <div className={`col-span-1 font-mono text-lg font-bold text-center ${idx < 3 ? 'text-hoops-yellow' : 'text-gray-600'}`}>
                                 {idx + 1}
                             </div>
                             
                             <div className="col-span-5 flex items-center gap-3 overflow-hidden">
                                 <div className="w-8 h-8 rounded-full bg-black overflow-hidden border border-white/10 flex-shrink-0">
-                                    <img src={player.imageUrl} className="w-full h-full object-cover" />
+                                    <SmoothImage src={player.imageUrl} className="w-full h-full object-cover" alt={player.name} />
                                 </div>
                                 <div className="flex flex-col min-w-0">
                                     <span className="font-bold text-sm leading-none truncate">{player.name}</span>
@@ -279,16 +266,6 @@ export default function MatchDetails() {
                                         <Star size={10} fill="currentColor"/> {voteStats[player.id]?.mvp || 0}
                                     </div>
                                 </div>
-                                <div className="text-right bg-red-900/20 px-1.5 py-1 rounded w-fit cursor-default border border-red-500/20" title="Votes Attaque">
-                                    <div className="font-mono font-bold text-xs text-red-400 flex items-center gap-1 justify-end">
-                                        <Zap size={10} fill="currentColor"/> {voteStats[player.id]?.offense || 0}
-                                    </div>
-                                </div>
-                                <div className="text-right bg-blue-900/20 px-1.5 py-1 rounded w-fit cursor-default border border-blue-500/20" title="Votes Défense">
-                                    <div className="font-mono font-bold text-xs text-blue-400 flex items-center gap-1 justify-end">
-                                        <Shield size={10} fill="currentColor"/> {voteStats[player.id]?.defense || 0}
-                                    </div>
-                                </div>
                             </div>
                         </div>
                     )) : (
@@ -304,7 +281,7 @@ export default function MatchDetails() {
                     <h3 className="font-bold text-hoops-primary mb-4 uppercase">{match.team_a.name}</h3>
                     <ul className="space-y-2">
                         {match.team_a.roster.map((p: any) => (
-                            <li key={p.id} onClick={() => setSelectedPlayer(p)} className="flex items-center gap-3 p-2 hover:bg-white/5 rounded cursor-pointer">
+                            <li key={p.id} onClick={() => handleOpenPlayer(p, match.team_a)} className="flex items-center gap-3 p-2 hover:bg-white/5 rounded cursor-pointer">
                                 <span className="font-mono text-gray-400">#{p.number}</span>
                                 <span className="font-bold">{p.name}</span>
                             </li>
@@ -315,7 +292,7 @@ export default function MatchDetails() {
                     <h3 className="font-bold text-hoops-yellow mb-4 uppercase">{match.team_b.name}</h3>
                      <ul className="space-y-2">
                         {match.team_b.roster.map((p: any) => (
-                            <li key={p.id} onClick={() => setSelectedPlayer(p)} className="flex items-center gap-3 p-2 hover:bg-white/5 rounded cursor-pointer">
+                            <li key={p.id} onClick={() => handleOpenPlayer(p, match.team_b)} className="flex items-center gap-3 p-2 hover:bg-white/5 rounded cursor-pointer">
                                 <span className="font-mono text-gray-400">#{p.number}</span>
                                 <span className="font-bold">{p.name}</span>
                             </li>

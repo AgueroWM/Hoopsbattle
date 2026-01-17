@@ -2,21 +2,21 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 const Footer: React.FC = () => {
-  // Placeholder logos - À remplacer par les vrais URLs
+  // Partenaires officiels KBP 2026
   const sponsors = [
     { name: 'Hoops Game', url: '/partners/logo_hoops_game.jpg' },
     { name: 'Omega Sport', url: '/partners/logo_omega_sport.jpg' }
   ];
 
   return (
-    <footer className="bg-black/80 backdrop-blur-xl border-t border-white/5 pt-12 pb-32 md:pb-12 mt-12">
+    <footer className="bg-black/80 backdrop-blur-xl border-t border-white/5 pt-12 pb-32 md:pb-12 mt-12 relative z-10">
       <div className="max-w-7xl mx-auto px-4">
         
         <div className="flex flex-col md:flex-row justify-between items-center gap-8 mb-12">
             {/* Event Logo Area */}
             <div className="flex flex-col items-center md:items-start gap-4">
                 <div className="flex items-center gap-2">
-                     {/* Logo Evenement - Placeholder texte stylisé si pas d'image */}
+                     {/* Logo Evenement */}
                      <span className="text-4xl font-display font-bold italic tracking-wide text-white">
                         HOOPS <span className="text-hoops-yellow">BATTLE</span>
                      </span>
@@ -47,7 +47,7 @@ const Footer: React.FC = () => {
                         <img 
                             src={s.url} 
                             alt={s.name} 
-                            className="h-full w-auto object-contain" 
+                            className="h-full w-auto object-contain rounded-md" 
                         />
                     </div>
                 ))}

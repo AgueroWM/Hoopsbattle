@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Trophy, Calendar, MapPin, ArrowRight, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
+import SmoothImage from '../components/SmoothImage';
 
 export default function Schedule() {
   const [matches, setMatches] = useState<any[]>([]);
@@ -36,10 +37,6 @@ export default function Schedule() {
                  Toutes les rencontres, résultats et statistiques.
              </p>
          </div>
-         
-         <Link to="/bracket" className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl font-bold uppercase tracking-wider flex items-center gap-2 transition-all">
-             <Trophy size={18} className="text-hoops-yellow"/> Voir le Tableau Final
-         </Link>
       </div>
 
       {loading ? (
@@ -52,7 +49,8 @@ export default function Schedule() {
           <div className="space-y-12">
               {Object.entries(grouped).map(([date, dayMatches]: any) => (
                   <div key={date}>
-                      <div className="flex items-center gap-4 mb-6 sticky top-20 z-10 py-4 bg-hoops-bg/95 backdrop-blur border-b border-white/10">
+                      {/* Z-INDEX AUGMENTÉ À 50 POUR PASSER AU DESSUS DE TOUT */}
+                      <div className="flex items-center gap-4 mb-6 sticky top-20 z-50 py-4 bg-hoops-bg/95 backdrop-blur border-b border-white/10 shadow-xl">
                           <div className="bg-hoops-primary text-white p-2 rounded-lg">
                               <Calendar size={20} />
                           </div>
@@ -101,13 +99,15 @@ function MatchRow({ match }: any) {
 
                 {/* Matchup */}
                 <div className="flex-1 p-4 md:p-6 flex items-center justify-between gap-4">
-                    {/* Team A */}
-                    <div className={`flex-1 flex items-center justify-end gap-3 md:gap-6 text-right ${winner === 'B' ? 'opacity-50 grayscale' : ''}`}>
-                        <div className="flex flex-col items-end">
-                            <span className="font-black italic uppercase text-sm md:text-xl leading-none">{teamA.name}</span>
+                    {/* Team A - Utilisation de min-w-0 pour permettre la troncature sur mobile */}
+                    <div className={`flex-1 flex items-center justify-end gap-3 md:gap-6 text-right min-w-0 ${winner === 'B' ? 'opacity-50 grayscale' : ''}`}>
+                        <div className="flex flex-col items-end min-w-0">
+                            <span className="font-black italic uppercase text-sm md:text-xl leading-none truncate w-full">{teamA.name}</span>
                             {winner === 'A' && <span className="text-[10px] font-bold text-green-500 uppercase flex items-center gap-1 mt-1">Gagnant <CheckCircle size={10}/></span>}
                         </div>
-                        <img src={teamA.logoUrl} className="w-10 h-10 md:w-16 md:h-16 rounded-full bg-black object-cover border border-white/10" onError={(e) => e.currentTarget.style.display='none'}/>
+                        <div className="w-10 h-10 md:w-16 md:h-16 rounded-full bg-black border border-white/10 overflow-hidden shrink-0">
+                            <SmoothImage src={teamA.logoUrl} className="w-full h-full" objectFit="cover" alt={teamA.name} />
+                        </div>
                     </div>
 
                     {/* Score Center */}
@@ -121,11 +121,13 @@ function MatchRow({ match }: any) {
                         )}
                     </div>
 
-                    {/* Team B */}
-                    <div className={`flex-1 flex items-center justify-start gap-3 md:gap-6 text-left ${winner === 'A' ? 'opacity-50 grayscale' : ''}`}>
-                        <img src={teamB.logoUrl} className="w-10 h-10 md:w-16 md:h-16 rounded-full bg-black object-cover border border-white/10" onError={(e) => e.currentTarget.style.display='none'}/>
-                        <div className="flex flex-col items-start">
-                            <span className="font-black italic uppercase text-sm md:text-xl leading-none">{teamB.name}</span>
+                    {/* Team B - Alignement corrigé pour mobile */}
+                    <div className={`flex-1 flex items-center justify-start gap-3 md:gap-6 text-left min-w-0 ${winner === 'A' ? 'opacity-50 grayscale' : ''}`}>
+                        <div className="w-10 h-10 md:w-16 md:h-16 rounded-full bg-black border border-white/10 overflow-hidden shrink-0">
+                            <SmoothImage src={teamB.logoUrl} className="w-full h-full" objectFit="cover" alt={teamB.name} />
+                        </div>
+                        <div className="flex flex-col items-start min-w-0">
+                            <span className="font-black italic uppercase text-sm md:text-xl leading-none truncate w-full">{teamB.name}</span>
                             {winner === 'B' && <span className="text-[10px] font-bold text-green-500 uppercase flex items-center gap-1 mt-1"><CheckCircle size={10}/> Gagnant</span>}
                         </div>
                     </div>

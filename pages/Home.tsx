@@ -4,12 +4,18 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Camera, Upload, Plus, ArrowRight, Trophy, X, User, Calendar, Smile } from 'lucide-react';
 import { api } from '../services/api'; 
 import { Team, Player } from '../types';
+import SmoothImage from '../components/SmoothImage';
 
 const Home: React.FC = () => {
   const [highlights, setHighlights] = useState<any[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
-  const [matches, setMatches] = useState<any[]>([]); // Pour la liste déroulante
+  const [matches, setMatches] = useState<any[]>([]); 
+
+  // Dynamic Date State
+  const [nextMatchDay, setNextMatchDay] = useState<string>('--');
+  const [nextMatchLabel, setNextMatchLabel] = useState<string>('À venir');
+  const [nextMatchSub, setNextMatchSub] = useState<string>('Janvier');
 
   const [brokenMediaIds, setBrokenMediaIds] = useState<Set<number>>(new Set());
 
@@ -21,9 +27,13 @@ const Home: React.FC = () => {
   
   // Upload Meta Data
   const [videoTitle, setVideoTitle] = useState('');
-  const [userName, setUserName] = useState(''); // NEW: Custom User Name
+  const [userName, setUserName] = useState(''); 
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('');
   const [selectedMatchId, setSelectedMatchId] = useState<string>('');
+  
+  // Search Filters for Upload Modal
+  const [playerSearch, setPlayerSearch] = useState('');
+  const [matchSearch, setMatchSearch] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,10 +79,54 @@ const Home: React.FC = () => {
   async function fetchMatches() {
       const { data } = await supabase
         .from('matches')
-        .select('id, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name), start_time')
-        .order('start_time', { ascending: false }); // Plus récents en premier
-      if (data) setMatches(data);
+        .select('id, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name), start_time, status')
+        .order('start_time', { ascending: false }); 
+      
+      if (data) {
+          setMatches(data);
+          determineNextKickoff(data);
+      }
   }
+
+  // --- LOGIQUE DATE AUTOMATIQUE ---
+  const determineNextKickoff = (allMatches: any[]) => {
+      // Filtrer les matchs non terminés (scheduled ou live) et les trier par date croissante
+      const upcoming = allMatches
+        .filter(m => m.status !== 'finished')
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+      // Prendre le tout premier match à venir
+      const nextMatch = upcoming[0];
+
+      if (nextMatch) {
+          const date = new Date(nextMatch.start_time);
+          setNextMatchDay(date.getDate().toString());
+          
+          // Mois en toutes lettres
+          const month = date.toLocaleString('fr-FR', { month: 'long' });
+          setNextMatchSub(month.charAt(0).toUpperCase() + month.slice(1));
+
+          // Logique spécifique pour les labels de jours
+          const day = date.getDate();
+          const monthIdx = date.getMonth(); // 0 = Janvier
+
+          if (monthIdx === 0) { // Janvier
+             if (day === 10) setNextMatchLabel('Kickoff J1');
+             else if (day === 11) setNextMatchLabel('Kickoff J2');
+             else if (day === 17) setNextMatchLabel('Kickoff J3');
+             else if (day === 18) setNextMatchLabel('Kickoff J4');
+             else if (day === 25) setNextMatchLabel('Finales');
+             else setNextMatchLabel('Kickoff Day');
+          } else {
+             setNextMatchLabel('Prochain Match');
+          }
+      } else {
+          // Fallback si tout est fini ou pas de match
+          setNextMatchDay('--');
+          setNextMatchLabel('Saison Terminée');
+          setNextMatchSub('Hoops');
+      }
+  };
 
   const handleMediaError = (id: number) => {
       setBrokenMediaIds(prev => new Set(prev).add(id));
@@ -88,6 +142,8 @@ const Home: React.FC = () => {
       setUserName('');
       setSelectedPlayerId('');
       setSelectedMatchId('');
+      setPlayerSearch('');
+      setMatchSearch('');
   };
 
   const handleFileSelect = (event: any) => {
@@ -126,7 +182,7 @@ const Home: React.FC = () => {
           media_url: publicUrl,
           media_type: uploadFile.type.startsWith('video') ? 'video' : 'image',
           status: 'pending', 
-          user_name: userName.trim() || 'Fan Anonyme', // Use Custom Name
+          user_name: userName.trim() || 'Fan Anonyme',
           player_id: selectedPlayerId ? parseInt(selectedPlayerId) : null,
           match_id: selectedMatchId ? parseInt(selectedMatchId) : null
       });
@@ -144,6 +200,13 @@ const Home: React.FC = () => {
 
   const isVideo = (url: string) => url && (url.includes('.mp4') || url.includes('.mov') || url.includes('.webm'));
   const visibleHighlights = highlights.filter(media => !brokenMediaIds.has(media.id));
+
+  // Filtered Lists
+  const filteredPlayers = allPlayers.filter(p => p.name.toLowerCase().includes(playerSearch.toLowerCase()));
+  const filteredMatches = matches.filter(m => 
+      (m.team_a?.name?.toLowerCase().includes(matchSearch.toLowerCase())) || 
+      (m.team_b?.name?.toLowerCase().includes(matchSearch.toLowerCase()))
+  );
 
   return (
     <div className="flex flex-col gap-12 pb-12 pt-24 px-4 max-w-7xl mx-auto font-sans relative">
@@ -176,10 +239,10 @@ const Home: React.FC = () => {
                 </div>
             </div>
 
-            <div className="glass-panel p-4 rounded-xl text-center min-w-[120px] hidden md:block">
-                <span className="block text-3xl font-bold text-white">10</span>
-                <span className="block text-xs font-bold text-hoops-yellow uppercase tracking-widest border-b border-white/10 pb-1 mb-1">Janvier</span>
-                <span className="block text-xs text-gray-400">Kickoff</span>
+            <div className="glass-panel p-4 rounded-xl text-center min-w-[120px] hidden md:block animate-float">
+                <span className="block text-3xl font-bold text-white">{nextMatchDay}</span>
+                <span className="block text-xs font-bold text-hoops-yellow uppercase tracking-widest border-b border-white/10 pb-1 mb-1">{nextMatchLabel}</span>
+                <span className="block text-xs text-gray-400">{nextMatchSub}</span>
             </div>
          </div>
       </section>
@@ -189,8 +252,9 @@ const Home: React.FC = () => {
           <div className="max-w-7xl mx-auto flex items-center justify-center md:justify-between gap-8 flex-wrap opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 hidden md:block">Partenaires Officiels</span>
              <div className="flex items-center gap-8 md:gap-16">
-                 <img src="/partners/logo_hoops_game.jpg" className="h-6 md:h-8 w-auto" alt="Hoops Game" />
-                 <img src="/partners/logo_omega_sport.jpg" className="h-6 md:h-8 w-auto" alt="Omega Sport" />
+                 {/* KBP Partners Display */}
+                 <img src="/partners/logo_hoops_game.jpg" className="h-6 md:h-8 w-auto rounded-sm" alt="Hoops Game" />
+                 <img src="/partners/logo_omega_sport.jpg" className="h-6 md:h-8 w-auto rounded-sm" alt="Omega Sport" />
              </div>
           </div>
       </section>
@@ -221,9 +285,9 @@ const Home: React.FC = () => {
                             onError={() => handleMediaError(media.id)}
                         />
                     ) : (
-                        <img 
+                        <SmoothImage 
                             src={media.video_url || media.media_url} 
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                            className="w-full h-full transition-transform duration-500 group-hover:scale-110" 
                             alt="Highlight"
                             onError={() => handleMediaError(media.id)}
                         />
@@ -236,7 +300,8 @@ const Home: React.FC = () => {
                                  {media.user_name || 'Fan'}
                              </span>
                         </div>
-                        <h3 className="text-sm font-bold text-white leading-tight mb-1">{media.title || 'Action du match'}</h3>
+                        {/* Ajout de leading-normal et pb-1 pour éviter de couper les lettres descendantes (g, p, etc.) */}
+                        <h3 className="text-sm font-bold text-white leading-normal pb-1 mb-1">{media.title || 'Action du match'}</h3>
                         
                         <div className="flex flex-wrap gap-2 mt-2">
                              {/* Tags */}
@@ -274,14 +339,17 @@ const Home: React.FC = () => {
          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
             {teams.length > 0 ? teams.slice(0, 8).map(team => (
                 <Link key={team.id} to="/teams" className="glass-panel p-4 rounded-xl hover:bg-white/5 transition-colors group flex flex-col items-center justify-center gap-3 text-center border border-white/5 hover:border-hoops-primary/50 aspect-square">
-                    <img 
-                        src={team.logoUrl} 
-                        className="w-12 h-12 rounded-full object-cover bg-white/5 border border-white/10" 
-                        alt={team.name}
-                        onError={(e) => {
-                            (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(team.name)}&background=random&color=fff`;
-                        }}
-                    />
+                    <div className="w-12 h-12 rounded-full overflow-hidden bg-black border border-white/10">
+                         <SmoothImage 
+                            src={team.logoUrl} 
+                            className="w-full h-full" 
+                            objectFit="cover"
+                            alt={team.name}
+                            onError={(e: any) => {
+                                (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(team.name)}&background=random&color=fff`;
+                            }}
+                        />
+                    </div>
                     <div className="w-full overflow-hidden">
                         <div className="font-display font-bold text-lg uppercase italic text-white leading-none truncate w-full">{team.name}</div>
                     </div>
@@ -295,12 +363,12 @@ const Home: React.FC = () => {
       {/* UPLOAD MODAL */}
       {showUploadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-hoops-card border border-white/20 rounded-2xl w-full max-w-md overflow-hidden relative shadow-2xl">
-                <button onClick={() => setShowUploadModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white">
+            <div className="bg-hoops-card border border-white/20 rounded-2xl w-full max-w-md overflow-hidden relative shadow-2xl flex flex-col max-h-[90vh]">
+                <button onClick={() => setShowUploadModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white z-10">
                     <X size={24}/>
                 </button>
 
-                <div className="p-6">
+                <div className="p-6 overflow-y-auto">
                     <h2 className="text-xl font-display font-bold uppercase italic mb-6">Poster sur le Feed</h2>
                     
                     {uploadStep === 'select' ? (
@@ -357,34 +425,54 @@ const Home: React.FC = () => {
                                 <label className="block text-xs font-bold text-gray-400 uppercase mb-1 flex items-center gap-2">
                                     <User size={12}/> Mentionner un joueur (Optionnel)
                                 </label>
-                                <select 
-                                    value={selectedPlayerId} 
-                                    onChange={(e) => setSelectedPlayerId(e.target.value)}
-                                    className="w-full bg-black/50 border border-white/20 rounded p-3 text-white focus:border-hoops-primary focus:outline-none appearance-none"
-                                >
-                                    <option value="">-- Aucun --</option>
-                                    {allPlayers.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name} (#{p.number})</option>
-                                    ))}
-                                </select>
+                                <div className="relative">
+                                    <input 
+                                        type="text"
+                                        placeholder="Rechercher un joueur..."
+                                        value={playerSearch}
+                                        onChange={(e) => setPlayerSearch(e.target.value)}
+                                        className="w-full bg-black/50 border border-white/20 rounded-t p-2 text-xs text-white focus:outline-none"
+                                    />
+                                    <select 
+                                        value={selectedPlayerId} 
+                                        onChange={(e) => { setSelectedPlayerId(e.target.value); }}
+                                        className="w-full bg-black/50 border border-white/20 rounded-b p-3 text-white focus:border-hoops-primary focus:outline-none appearance-none"
+                                        size={3}
+                                    >
+                                        <option value="">-- Aucun --</option>
+                                        {filteredPlayers.slice(0, 20).map(p => (
+                                            <option key={p.id} value={p.id}>{p.name} (#{p.number})</option>
+                                        ))}
+                                    </select>
+                                </div>
                              </div>
 
                              <div>
                                 <label className="block text-xs font-bold text-gray-400 uppercase mb-1 flex items-center gap-2">
                                     <Calendar size={12}/> Mentionner un match (Optionnel)
                                 </label>
-                                <select 
-                                    value={selectedMatchId} 
-                                    onChange={(e) => setSelectedMatchId(e.target.value)}
-                                    className="w-full bg-black/50 border border-white/20 rounded p-3 text-white focus:border-hoops-primary focus:outline-none appearance-none"
-                                >
-                                    <option value="">-- Aucun --</option>
-                                    {matches.map(m => (
-                                        <option key={m.id} value={m.id}>
-                                            {m.team_a?.name || '?'} vs {m.team_b?.name || '?'} ({new Date(m.start_time).toLocaleDateString()})
-                                        </option>
-                                    ))}
-                                </select>
+                                <div className="relative">
+                                    <input 
+                                        type="text"
+                                        placeholder="Rechercher un match (équipe)..."
+                                        value={matchSearch}
+                                        onChange={(e) => setMatchSearch(e.target.value)}
+                                        className="w-full bg-black/50 border border-white/20 rounded-t p-2 text-xs text-white focus:outline-none"
+                                    />
+                                    <select 
+                                        value={selectedMatchId} 
+                                        onChange={(e) => setSelectedMatchId(e.target.value)}
+                                        className="w-full bg-black/50 border border-white/20 rounded-b p-3 text-white focus:border-hoops-primary focus:outline-none appearance-none"
+                                        size={3}
+                                    >
+                                        <option value="">-- Aucun --</option>
+                                        {filteredMatches.slice(0, 10).map(m => (
+                                            <option key={m.id} value={m.id}>
+                                                {m.team_a?.name || '?'} vs {m.team_b?.name || '?'}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
                              </div>
 
                              <button 

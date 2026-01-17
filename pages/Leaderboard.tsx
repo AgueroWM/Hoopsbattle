@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { api } from '../services/api';
-import { Trophy, Crown, Star, ShieldCheck, Activity } from 'lucide-react';
+import { Trophy, Crown, Activity, ShieldCheck, ArrowRight } from 'lucide-react';
 import PlayerModal from '../components/PlayerModal';
+import SmoothImage from '../components/SmoothImage';
 
 export default function Leaderboard() {
   const [activeTab, setActiveTab] = useState<'players' | 'teams'>('players');
   const [topPlayers, setTopPlayers] = useState<any[]>([]);
-  const [qualifiedTeams, setQualifiedTeams] = useState<any[]>([]);
+  const [finishedMatches, setFinishedMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
 
@@ -18,101 +19,82 @@ export default function Leaderboard() {
   const fetchLeaderboardData = async () => {
     setLoading(true);
     try {
-        // 1. Récupération des données référentielles et des MATCHS TERMINÉS (Source de vérité)
-        const [playersRefRes, teamsRefRes, matchesRes, leaderboardRes] = await Promise.all([
-            supabase.from('players').select('id, avatar_url, team_id, position, number'),
-            api.teams.getAll(),
-            supabase.from('matches').select('*').eq('status', 'finished'),
-            supabase.from('player_leaderboard').select('*').order('ppg', { ascending: false }).limit(50)
+        const [rawPlayersRes, rawStatsRes, matchesRes] = await Promise.all([
+            supabase.from('players').select('*, team:teams(*)'),
+            supabase.from('player_stats').select('*'),
+            supabase.from('matches').select('*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)').eq('status', 'finished').order('start_time', { ascending: true })
         ]);
 
-        const playersData = playersRefRes.data || [];
-        const finishedMatches = matchesRes.data || [];
-        const teamsList = teamsRefRes || [];
-        const leaderboardData = leaderboardRes.data || [];
-
-        const playersMap = new Map<number, any>(playersData.map((p: any) => [p.id, p]));
-        const teamsMap = new Map<string, any>(teamsList.map((t: any) => [t.id, t]));
-
-        // --- CALCUL MANUEL DES VICTOIRES (Plus fiable que la vue standings pour l'instant T) ---
-        const teamStats = new Map<string, { wins: number, losses: number }>();
-
-        // Init stats
-        teamsList.forEach((t: any) => {
-            teamStats.set(t.id, { wins: 0, losses: 0 });
-        });
-
-        // Process matches
-        finishedMatches.forEach((m: any) => {
-            const teamAId = m.team_a_id.toString();
-            const teamBId = m.team_b_id.toString();
-            
-            const statsA = teamStats.get(teamAId) || { wins: 0, losses: 0 };
-            const statsB = teamStats.get(teamBId) || { wins: 0, losses: 0 };
-
-            if (m.score_team_a > m.score_team_b) {
-                statsA.wins++;
-                statsB.losses++;
-            } else if (m.score_team_b > m.score_team_a) {
-                statsB.wins++;
-                statsA.losses++;
-            }
-
-            teamStats.set(teamAId, statsA);
-            teamStats.set(teamBId, statsB);
-        });
-
-        // --- TRAITEMENT EQUIPES ---
-        const mergedTeams = teamsList.map((t: any) => {
-            const stats = teamStats.get(t.id) || { wins: 0, losses: 0 };
-            return {
-                ...t,
-                wins: stats.wins,
-                losses: stats.losses,
-            };
-        });
-
-        // Filtrer pour les Qualifiés
-        // LOGIQUE : On privilégie ceux qui ont gagné leur journée (donc souvent 2 victoires : Demi + Finale)
-        // Si personne n'a 2 victoires, on prend ceux qui ont 1 victoire.
-        let qualified = mergedTeams.filter((t: any) => t.wins >= 2);
+        const rawPlayers = rawPlayersRes.data || [];
+        const rawStats = rawStatsRes.data || [];
+        const matches = matchesRes.data || [];
         
-        // Fallback : Si on est au début du tournoi et que personne n'a 2 victoires (ex: format poule unique), on prend ceux > 0
-        if (qualified.length === 0) {
-            qualified = mergedTeams.filter((t: any) => t.wins > 0);
-        }
+        setFinishedMatches(matches);
 
-        // Tri par victoires
-        qualified.sort((a: any, b: any) => b.wins - a.wins);
-        setQualifiedTeams(qualified);
-
+        // --- COMPTAGE DES VICTOIRES PAR ÉQUIPE ---
+        const teamWins = new Map<number, number>();
+        matches.forEach((m: any) => {
+            if (m.score_team_a > m.score_team_b) {
+                teamWins.set(m.team_a_id, (teamWins.get(m.team_a_id) || 0) + 1);
+            } else if (m.score_team_b > m.score_team_a) {
+                teamWins.set(m.team_b_id, (teamWins.get(m.team_b_id) || 0) + 1);
+            }
+        });
 
         // --- TRAITEMENT JOUEURS ---
-        const mergedPlayers = (leaderboardData || []).map((p: any) => {
-            const playerRef: any = playersMap.get(p.player_id) || {};
-            const teamRef: any = teamsMap.get(p.team_id?.toString()) || {};
-            
+        const statsMap = new Map<number, any>();
+
+        rawStats.forEach((stat: any) => {
+            const pid = stat.player_id;
+            if (!statsMap.has(pid)) {
+                statsMap.set(pid, {
+                    total_points: 0, total_rebounds: 0, total_assists: 0,
+                    games_played: 0
+                });
+            }
+            const current = statsMap.get(pid);
+            current.total_points += (stat.points || 0);
+            current.total_rebounds += (stat.rebounds_total || 0);
+            current.total_assists += (stat.assists || 0);
+            current.games_played += 1;
+        });
+
+        let mergedPlayers = rawPlayers.map((p: any) => {
+            const stats = statsMap.get(p.id) || { total_points: 0, total_rebounds: 0, total_assists: 0, games_played: 0 };
+            const ppg = stats.games_played > 0 ? (stats.total_points / stats.games_played).toFixed(1) : "0.0";
+            let imageUrl = p.avatar_url;
+            if (!imageUrl) imageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=random&color=fff`;
+
             return {
-                id: p.player_id,
-                name: p.player_name,
-                team: { name: p.team_name, logoUrl: teamRef.logoUrl },
-                avatar_url: playerRef.avatar_url, 
-                number: playerRef.number,
-                position: playerRef.position,
-                
+                id: p.id,
+                name: p.name,
+                team: { 
+                    name: p.team?.name || 'Sans Équipe', 
+                    logoUrl: p.team?.logo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.team?.name || '?')}&background=0f172a&color=F4FF5F`,
+                    id: p.team?.id
+                },
+                imageUrl: imageUrl,
+                number: p.number,
+                position: p.position || '?',
                 stats: {
-                    ppg: parseFloat(p.ppg).toFixed(1),
-                    total_points: p.total_points,
-                    games_played: p.games_played,
-                    rebounds: p.total_rebounds || 0,
-                    assists: p.total_assists || 0,
-                    blocks: p.total_blocks || 0,
-                    steals: p.total_steals || 0
+                    ppg: ppg,
+                    points: stats.total_points,
+                    rebounds: stats.total_rebounds,
+                    assists: stats.total_assists,
+                    games_played: stats.games_played,
                 }
             };
         });
 
-        setTopPlayers(mergedPlayers);
+        // FILTRAGE STRICT : On ne garde que les joueurs des équipes ayant gagné au moins 2 matchs
+        // (Vainqueurs de leur bracket qualificatif)
+        if (matches.length > 0) {
+            mergedPlayers = mergedPlayers.filter((p: any) => (teamWins.get(p.team.id) || 0) >= 2);
+        }
+
+        const activePlayers = mergedPlayers.filter((p: any) => p.stats.games_played > 0);
+        activePlayers.sort((a: any, b: any) => parseFloat(b.stats.ppg) - parseFloat(a.stats.ppg));
+        setTopPlayers(activePlayers);
 
     } catch (e) {
         console.error("Error fetching leaderboard", e);
@@ -121,9 +103,19 @@ export default function Leaderboard() {
     }
   };
 
-  if (loading) return <div className="min-h-screen bg-hoops-bg flex items-center justify-center text-white"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-hoops-yellow"></div></div>;
+  // Helper pour trouver les vainqueurs par date
+  const getWinnerOfMatchOnDate = (dateStr: string, matchIndex: number) => {
+      // Filtrer les matchs finis par date
+      const daysMatches = finishedMatches.filter(m => m.start_time.includes(dateStr));
+      const match = daysMatches[matchIndex];
+      if (!match) return null;
 
-  const slots = [0, 1, 2, 3];
+      if (match.score_team_a > match.score_team_b) return match.team_a;
+      if (match.score_team_b > match.score_team_a) return match.team_b;
+      return null;
+  };
+
+  if (loading) return <div className="min-h-screen bg-hoops-bg flex items-center justify-center text-white"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-hoops-yellow"></div></div>;
 
   return (
     <div className="min-h-screen bg-hoops-bg text-white pt-24 pb-32 px-4 max-w-4xl mx-auto font-sans">
@@ -134,9 +126,9 @@ export default function Leaderboard() {
         <h1 className="text-4xl md:text-5xl font-display font-bold uppercase italic text-white mb-2">
            Hall of <span className="text-hoops-yellow">Fame</span>
         </h1>
+        <p className="text-gray-400 text-sm">Statistiques officielles cumulées de la compétition</p>
       </div>
 
-      {/* Tabs */}
       <div className="flex justify-center mb-8 bg-white/5 p-1 rounded-full w-fit mx-auto">
           <button 
             onClick={() => setActiveTab('players')}
@@ -158,37 +150,58 @@ export default function Leaderboard() {
                   <Activity className="text-hoops-yellow" size={28} />
                   <div>
                     <h2 className="text-2xl font-bold uppercase italic">Meilleurs Scoreurs</h2>
-                    <p className="text-xs text-gray-400">Classement par moyenne de points (PPG)</p>
+                    <p className="text-xs text-gray-400">Classement par moyenne de points (PTS/M)</p>
+                    {finishedMatches.length > 0 && <span className="text-[10px] text-hoops-primary font-bold uppercase bg-hoops-primary/10 px-2 py-0.5 rounded mt-1 inline-block">Équipes Qualifiées (2+ Victoires)</span>}
                   </div>
               </div>
 
-              {topPlayers.map((p, i) => (
-                  <div key={p.id} onClick={() => setSelectedPlayer(p)} className="bg-hoops-card border border-white/5 p-3 rounded-xl flex items-center gap-4 hover:border-hoops-primary/50 transition-all group cursor-pointer">
-                      <div className={`font-mono text-xl font-bold w-8 text-center ${i < 3 ? 'text-hoops-yellow scale-125' : 'text-gray-600'}`}>
-                          #{i + 1}
-                      </div>
-                      
-                      <div className="relative w-12 h-12 flex-shrink-0">
-                          <img 
-                            src={p.avatar_url || `https://ui-avatars.com/api/?name=${p.name}`} 
-                            className="w-full h-full rounded-full object-cover border border-white/10"
-                          />
-                          {i === 0 && <div className="absolute -top-2 -right-2 text-xl">👑</div>}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-white truncate group-hover:text-hoops-primary transition-colors">{p.name}</h3>
-                          <p className="text-xs text-gray-500 uppercase flex items-center gap-1">
-                              {p.team?.name} • <span className="text-gray-400">{p.stats.games_played} Matchs</span>
-                          </p>
-                      </div>
-
-                      <div className="text-right pl-4">
-                          <div className="text-2xl font-display font-bold text-hoops-primary">{p.stats.ppg}</div>
-                          <div className="text-[10px] text-gray-500 font-bold uppercase">PPG</div>
-                      </div>
+              {topPlayers.length === 0 ? (
+                  <div className="text-center py-10 text-gray-500 bg-white/5 rounded-xl border border-dashed border-white/10">
+                      Aucune statistique disponible pour le moment (ou aucun joueur qualifié à 2 victoires).
                   </div>
-              ))}
+              ) : (
+                topPlayers.map((p, i) => (
+                    <div key={p.id} onClick={() => setSelectedPlayer(p)} className="bg-hoops-card border border-white/5 p-4 rounded-xl flex items-center gap-4 hover:border-hoops-primary/50 transition-all group cursor-pointer shadow-sm relative overflow-hidden">
+                        <div className={`font-mono text-xl font-bold w-8 text-center flex-shrink-0 ${i < 3 ? 'text-hoops-yellow scale-125' : 'text-gray-600'}`}>
+                            #{i + 1}
+                        </div>
+                        
+                        <div className="relative w-14 h-14 flex-shrink-0">
+                            {/* JOUEUR AVATAR: object-cover pour les visages */}
+                            <div className="w-full h-full rounded-full border border-white/10 bg-black overflow-hidden">
+                                    <SmoothImage 
+                                        src={p.imageUrl} 
+                                        className="w-full h-full"
+                                        objectFit="cover" 
+                                        alt={p.name}
+                                    />
+                            </div>
+                            {i === 0 && <div className="absolute -top-1 -right-1 text-lg drop-shadow-md">👑</div>}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                            <div className="text-[10px] font-bold text-hoops-primary uppercase mb-0.5">{p.position}</div>
+                            <h3 className="font-bold text-white text-lg leading-tight truncate group-hover:text-hoops-primary transition-colors">{p.name}</h3>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                {/* LOGO EQUIPE: object-cover pour éviter l'effet 'petit carré dans rond' */}
+                                {p.team?.logoUrl && (
+                                    <div className="w-4 h-4 rounded-full bg-black overflow-hidden flex items-center justify-center">
+                                        <img src={p.team.logoUrl} className="w-full h-full object-cover" />
+                                    </div>
+                                )}
+                                <span className="text-xs text-gray-500 font-mono uppercase">
+                                    {p.team?.name} • #{p.number}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="text-right pl-4 border-l border-white/10">
+                            <div className="text-2xl font-display font-bold text-hoops-primary">{p.stats.ppg}</div>
+                            <div className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">PTS/M</div>
+                        </div>
+                    </div>
+                ))
+              )}
           </div>
       )}
 
@@ -197,55 +210,111 @@ export default function Leaderboard() {
               <div className="flex items-center gap-3 mb-6 border-b border-white/10 pb-4">
                   <Trophy className="text-hoops-primary" size={28} />
                   <div>
-                    <h2 className="text-2xl font-bold uppercase italic">Le Final 4</h2>
-                    <p className="text-xs text-gray-400">Les vainqueurs des journées de qualification.</p>
+                    <h2 className="text-2xl font-bold uppercase italic">Phase Finale</h2>
+                    <p className="text-xs text-gray-400">Les vainqueurs des samedis et dimanches s'affrontent.</p>
                   </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {slots.map((idx) => {
-                      const team = qualifiedTeams[idx];
-                      
-                      if (team) {
-                          return (
-                              <div key={team.id} className="relative h-48 bg-gradient-to-br from-green-900/40 to-black border border-green-500/50 rounded-2xl overflow-hidden shadow-lg group">
-                                  {/* Background Logo */}
-                                  <img src={team.logoUrl} className="absolute right-[-20px] top-[-20px] w-40 h-40 opacity-20 blur-xl rounded-full" />
-                                  
-                                  <div className="absolute top-3 right-3 bg-green-500 text-black text-[10px] font-black uppercase px-2 py-1 rounded shadow-lg flex items-center gap-1">
-                                      <ShieldCheck size={12}/> Qualifié
-                                  </div>
+              <div className="space-y-8">
+                  {/* BRACKET SEMI 1: SAMEDI vs SAMEDI */}
+                  <BracketMatchup 
+                      title="Demi-Finale 1"
+                      sub="Vainqueurs des Samedis"
+                      team1={getWinnerOfMatchOnDate('2026-01-10', 2)} // Winner of Match 3 on 10th
+                      team2={getWinnerOfMatchOnDate('2026-01-17', 2)} // Winner of Match 3 on 17th
+                      label1="Qualifié Samedi 1"
+                      label2="Qualifié Samedi 2"
+                  />
 
-                                  <div className="p-6 h-full flex flex-col justify-end relative z-10">
-                                      <div className="w-16 h-16 rounded-full border-2 border-green-400 p-1 mb-3 bg-black">
-                                          <img src={team.logoUrl} className="w-full h-full object-cover rounded-full" />
-                                      </div>
-                                      <h3 className="text-3xl font-display font-bold italic uppercase leading-none mb-1 text-white">{team.name}</h3>
-                                      <div className="flex justify-between items-end">
-                                          <p className="text-xs text-green-300 font-bold uppercase tracking-widest">{team.city || 'City'}</p>
-                                          <div className="text-right">
-                                              <span className="block text-2xl font-display font-bold text-white leading-none">{team.wins}</span>
-                                              <span className="text-[9px] text-gray-400 font-bold uppercase">Victoires</span>
-                                          </div>
-                                      </div>
-                                  </div>
-                              </div>
-                          );
-                      } else {
-                          return (
-                              <div key={idx} className="h-48 bg-white/5 border border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center text-gray-600 gap-2">
-                                  <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
-                                      <Trophy size={24} className="opacity-20" />
-                                  </div>
-                                  <span className="font-bold uppercase text-sm tracking-widest">Place à prendre</span>
-                                  <span className="text-xs opacity-50">Match Jour {idx + 1}</span>
-                              </div>
-                          );
-                      }
-                  })}
+                  {/* BRACKET SEMI 2: DIMANCHE vs DIMANCHE */}
+                  <BracketMatchup 
+                      title="Demi-Finale 2"
+                      sub="Vainqueurs des Dimanches"
+                      team1={getWinnerOfMatchOnDate('2026-01-11', 2)} 
+                      team2={getWinnerOfMatchOnDate('2026-01-18', 2)} 
+                      label1="Qualifié Dimanche 1"
+                      label2="Qualifié Dimanche 2"
+                  />
+
+                  <div className="flex items-center justify-center py-4">
+                      <div className="h-16 w-1 bg-gradient-to-b from-white/10 to-hoops-yellow"></div>
+                  </div>
+
+                  {/* GRANDE FINALE */}
+                  <div className="bg-gradient-to-b from-hoops-card to-black border border-hoops-yellow rounded-2xl p-6 text-center relative overflow-hidden">
+                       <div className="absolute inset-0 bg-hoops-yellow/5 z-0"></div>
+                       <div className="relative z-10">
+                           <Trophy className="mx-auto text-hoops-yellow mb-2 h-12 w-12 drop-shadow-[0_0_15px_rgba(244,255,95,0.5)]" />
+                           <h3 className="text-3xl font-display font-bold uppercase italic text-white mb-1">Grande Finale</h3>
+                           <p className="text-xs text-gray-400 uppercase tracking-widest mb-6">25 Janvier 2026</p>
+                           
+                           <div className="flex items-center justify-center gap-4 text-xl font-bold text-gray-500">
+                               <span>Vainqueur Demi 1</span>
+                               <span className="text-hoops-primary">VS</span>
+                               <span>Vainqueur Demi 2</span>
+                           </div>
+                       </div>
+                  </div>
               </div>
           </div>
       )}
     </div>
   );
+}
+
+// Composant sécurisé qui ne crashe pas si team1/team2 est undefined
+function BracketMatchup({ title, sub, team1, team2, label1, label2 }: any) {
+    return (
+        <div className="bg-hoops-card border border-white/10 rounded-xl overflow-hidden shadow-lg">
+            <div className="bg-white/5 px-4 py-2 border-b border-white/5 flex justify-between items-center">
+                <span className="font-bold uppercase text-sm text-hoops-primary">{title}</span>
+                <span className="text-[10px] text-gray-500 uppercase tracking-widest">{sub}</span>
+            </div>
+            <div className="p-4 flex flex-col gap-4">
+                {/* Team 1 Slot */}
+                <div className={`flex items-center justify-between p-3 rounded-lg border ${team1 ? 'bg-black/40 border-green-500/30' : 'bg-black/20 border-dashed border-white/10'}`}>
+                    {team1 && team1.name ? (
+                        <>
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-black border border-white/10 p-0.5">
+                                    {team1.logo_url && <img src={team1.logo_url} className="w-full h-full object-cover" />}
+                                </div>
+                                <span className="font-bold uppercase">{team1.name}</span>
+                            </div>
+                            <ShieldCheck size={16} className="text-green-500" />
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-3 text-gray-500 w-full">
+                            <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10"></div>
+                            <span className="text-xs italic">{label1 || "À DÉTERMINER"}</span>
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex justify-center -my-2 relative z-10">
+                    <span className="bg-hoops-card px-2 text-xs font-bold text-gray-600">VS</span>
+                </div>
+
+                {/* Team 2 Slot */}
+                <div className={`flex items-center justify-between p-3 rounded-lg border ${team2 ? 'bg-black/40 border-green-500/30' : 'bg-black/20 border-dashed border-white/10'}`}>
+                    {team2 && team2.name ? (
+                        <>
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-black border border-white/10 p-0.5">
+                                    {team2.logo_url && <img src={team2.logo_url} className="w-full h-full object-cover" />}
+                                </div>
+                                <span className="font-bold uppercase">{team2.name}</span>
+                            </div>
+                            <ShieldCheck size={16} className="text-green-500" />
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-3 text-gray-500 w-full">
+                            <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10"></div>
+                            <span className="text-xs italic">{label2 || "À DÉTERMINER"}</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
 }

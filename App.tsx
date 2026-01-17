@@ -1,30 +1,40 @@
-import React, { ErrorInfo, ReactNode } from 'react';
+// Developed by KBP (King of Best Practice) - 2026
+import React, { ErrorInfo, ReactNode, useEffect } from 'react';
 import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { Analytics } from '@vercel/analytics/react';
 import Navbar from './components/Navbar';
+import MobileDock from './components/MobileDock';
+import Footer from './components/Footer'; // Import du Footer
 import Home from './pages/Home';
 import LiveHub from './pages/LiveHub';
-import Schedule from './pages/Schedule';
-import MatchDetails from './pages/MatchDetails';
 import Bracket from './pages/Bracket';
 import Highlights from './pages/Highlights';
 import StatsCMS from './pages/StatsCMS';
-import Rules from './pages/Rules';
-import Leaderboard from './pages/Leaderboard';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminMatch from './pages/AdminMatch';
 import AdminModeration from './pages/AdminModeration';
-import Footer from './components/Footer';
-import MobileDock from './components/MobileDock';
+import Schedule from './pages/Schedule';
+import MatchDetails from './pages/MatchDetails';
+import Rules from './pages/Rules';
+import Leaderboard from './pages/Leaderboard';
 
-class ErrorBoundary extends React.Component<{ children: ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
+interface ErrorBoundaryProps {
+  children?: ReactNode;
+}
 
-  static getDerivedStateFromError(_: Error) {
-    return { hasError: true };
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+// Composant de gestion d'erreur global pour éviter l'écran blanc
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: null
+  };
+
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -33,34 +43,58 @@ class ErrorBoundary extends React.Component<{ children: ReactNode }, { hasError:
 
   render() {
     if (this.state.hasError) {
-      return <div className="p-4 text-center text-red-500">Something went wrong. Please refresh.</div>;
-    }
+      // Helper pour afficher l'erreur proprement même si c'est un objet bizarre
+      const errorMsg = this.state.error instanceof Error 
+          ? this.state.error.toString() 
+          : JSON.stringify(this.state.error, null, 2);
 
-    return this.props.children;
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[#020617] text-white p-8 text-center font-sans">
+            <div className="max-w-lg">
+                <div className="text-6xl mb-4">🤕</div>
+                <h1 className="text-3xl font-bold text-red-500 mb-4 font-display uppercase italic">Faute technique !</h1>
+                <p className="text-gray-400 mb-6">Une erreur est survenue lors du chargement de l'application.</p>
+                
+                <div className="bg-black/50 p-4 rounded text-left font-mono text-xs mb-6 overflow-auto border border-white/10 text-red-300 whitespace-pre-wrap">
+                    {errorMsg}
+                </div>
+                
+                <button 
+                    onClick={() => window.location.reload()} 
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-xl font-bold uppercase tracking-wider transition-all"
+                >
+                    Recharger la page
+                </button>
+            </div>
+        </div>
+      );
+    }
+    return (this as any).props.children;
   }
 }
 
+// Composant pour masquer le footer sur le feed (highlights)
 const ConditionalFooter = () => {
   const location = useLocation();
-  const hideFooter = location.pathname.startsWith('/admin') || location.pathname === '/live';
-  return hideFooter ? null : <Footer />;
+  if (location.pathname.startsWith('/highlights')) return null;
+  return <Footer />;
 };
 
 const ConditionalMobileDock = () => {
-  const location = useLocation();
-  const hideDock = location.pathname.startsWith('/admin');
-  return hideDock ? null : <MobileDock />;
+  // Le dock est maintenant affiché partout pour faciliter la navigation
+  return <MobileDock />;
 };
 
 function App() {
-  // Easter egg pour les curieux
-  React.useEffect(() => {
-    console.log("%c🏀 HOOPS BATTLE HUB %c\nDeveloped with ❤️ and caffeine by Doc.\nDon't break my code.", "font-size: 20px; font-weight: bold; color: #F4FF5F;", "font-size: 12px; color: #aaa;");
+  // Initialisation du module (KBP)
+  useEffect(() => {
+    console.log("Hoops Game Hub - KBP Edition 2026");
+    console.log("Initialisation des services terminée.");
   }, []);
 
   return (
     <ErrorBoundary>
-      <Analytics />
+      {/* Utilisation de HashRouter pour éviter les erreurs de navigation sur les environnements statiques */}
       <HashRouter>
         <div className="min-h-screen bg-hoops-bg text-white font-sans selection:bg-hoops-yellow selection:text-black flex flex-col">
           <Navbar />

@@ -82,9 +82,7 @@ const AdminDashboard: React.FC = () => {
     // Trim input to avoid whitespace errors
     const cleanPin = pinInput.trim();
     
-    // FIXME: Yes, I know client-side hash is not secure. 
-    // It's just to stop random people from clicking buttons during the event.
-    // Will move to Supabase Auth next week.
+    // Vérification via notre hash simple
     if (simpleHash(cleanPin) === PIN_HASH) {
         setIsAuthenticated(true);
         sessionStorage.setItem('hoops_admin_auth', 'true');

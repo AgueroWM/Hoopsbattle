@@ -34,7 +34,6 @@ export default function Bracket() {
         </div>
 
         {/* BRACKET CONTAINER */}
-        {/* CORRECTION CRITIQUE: justify-center retiré pour permettre le scroll horizontal complet */}
         <div className="w-full overflow-x-auto pb-12 px-4">
             <div className="min-w-[1000px] max-w-[1400px] mx-auto flex justify-between items-center relative">
                 
@@ -79,7 +78,7 @@ export default function Bracket() {
                         <Trophy size={48} className="mx-auto text-hoops-primary mb-4 drop-shadow-lg" />
                         <h2 className="font-display font-bold uppercase text-4xl italic text-white mb-2">Grande Finale</h2>
                         <div className="text-xs font-bold bg-hoops-primary text-white px-4 py-1.5 rounded-full inline-block mb-8 uppercase tracking-widest">
-                            24 Janvier 2026
+                            25 Janvier 2026
                         </div>
                         
                         {/* THE FINAL MATCH CARD */}

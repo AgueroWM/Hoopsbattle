@@ -1,14 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { X, Trophy, Activity, Target, Shield, Zap, Star } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, Trophy, Shield, Zap, Star, BarChart3, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import SmoothImage from './SmoothImage';
 
 interface PlayerModalProps {
   player: any;
-  matchId?: string; // Optionnel : Si fourni, active le vote
+  matchId?: string; // Optionnel
   onClose: () => void;
 }
 
 export default function PlayerModal({ player, matchId, onClose }: PlayerModalProps) {
+  const [loading, setLoading] = useState(true);
+  const [seasonStats, setSeasonStats] = useState<any>({
+      ppg: "0.0", rpg: "0.0", apg: "0.0", spg: "0.0", bpg: "0.0",
+      games_played: 0,
+      total_points: 0
+  });
+  
+  // Gestion du vote
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(matchId || null);
+  const [activeMatchName, setActiveMatchName] = useState<string>(''); // Pour afficher le nom
   const [votesStatus, setVotesStatus] = useState({
       defense: false,
       offense: false,
@@ -16,162 +28,232 @@ export default function PlayerModal({ player, matchId, onClose }: PlayerModalPro
   });
 
   useEffect(() => {
-      if (matchId) {
-          const currentHalf = 2; // Simplification pour l'instant
-          setVotesStatus({
-              defense: !!localStorage.getItem(`vote_${matchId}_defense_h${currentHalf}`),
-              offense: !!localStorage.getItem(`vote_${matchId}_offense_h${currentHalf}`),
-              mvp: !!localStorage.getItem(`vote_${matchId}_mvp_h${currentHalf}`)
-          });
-      }
-  }, [matchId]);
+      const fetchFullStats = async () => {
+          if (!player?.id) return;
+          setLoading(true);
 
-  if (!player) return null;
+          // 1. Stats Saison
+          const { data: stats } = await supabase
+              .from('player_stats')
+              .select('*')
+              .eq('player_id', player.id);
 
-  // PRIORITY LOGIC:
-  // On regarde si on a des stats venant du leaderboard (DB View) ou des stats d'un match unique
-  
-  // 1. POINTS
-  let mainStatLabel = "PTS";
-  let mainStatValue = player.points || 0;
+          if (stats && stats.length > 0) {
+              const totals = stats.reduce((acc: any, curr: any) => ({
+                  pts: acc.pts + (curr.points || 0),
+                  reb: acc.reb + (curr.rebounds_total || 0),
+                  ast: acc.ast + (curr.assists || 0),
+                  stl: acc.stl + (curr.steals || 0),
+                  blk: acc.blk + (curr.blocks || 0),
+              }), { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0 });
 
-  // Si l'objet stats.ppg existe (venant du Leaderboard), c'est prioritaire
-  if (player.stats && player.stats.ppg !== undefined) {
-      mainStatLabel = "PPG";
-      mainStatValue = player.stats.ppg;
-  }
+              const games = stats.length;
+              
+              setSeasonStats({
+                  ppg: (totals.pts / games).toFixed(1),
+                  rpg: (totals.reb / games).toFixed(1),
+                  apg: (totals.ast / games).toFixed(1),
+                  spg: (totals.stl / games).toFixed(1),
+                  bpg: (totals.blk / games).toFixed(1),
+                  games_played: games,
+                  total_points: totals.pts
+              });
+          }
 
-  // 2. REBOUNDS
-  const reb = player.stats?.rebounds || player.rebounds || player.rebounds_total || 0;
-  
-  // 3. ASSISTS
-  const ast = player.stats?.assists || player.assists || 0;
-  
-  // 4. AUTRES
-  const blk = player.stats?.blocks || player.blocks || 0;
-  const stl = player.stats?.steals || player.steals || 0;
+          // 2. Gestion du Match Actif pour le vote
+          let targetMatchId = activeMatchId;
 
-  // Stats détaillées shooting (si disponibles depuis AdminMatch logic / Single Match)
-  const p3 = player.points_3_made || 0;
-  const p2 = player.points_2_made || 0;
-  const p1 = player.points_1_made || 0;
+          // Si pas d'ID fourni, on cherche le dernier match de l'équipe
+          if (!targetMatchId) {
+              const { data: lastMatch } = await supabase
+                  .from('matches')
+                  .select('id, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)')
+                  .or(`team_a_id.eq.${player.team?.id},team_b_id.eq.${player.team?.id}`)
+                  .order('start_time', { ascending: false })
+                  .limit(1)
+                  .single();
+              
+              if (lastMatch) {
+                  targetMatchId = lastMatch.id;
+                  setActiveMatchId(targetMatchId);
+                  setActiveMatchName(`${lastMatch.team_a?.name} vs ${lastMatch.team_b?.name}`);
+              }
+          } else if (!activeMatchName) {
+              // Si on a l'ID mais pas le nom, on le cherche
+               const { data: currentMatch } = await supabase
+                  .from('matches')
+                  .select('team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)')
+                  .eq('id', targetMatchId)
+                  .single();
+               if(currentMatch) {
+                   setActiveMatchName(`${currentMatch.team_a?.name} vs ${currentMatch.team_b?.name}`);
+               }
+          }
+
+          if (targetMatchId) {
+              checkVoteStatus(targetMatchId);
+          }
+
+          setLoading(false);
+      };
+
+      fetchFullStats();
+  }, [player]);
+
+  const checkVoteStatus = (mId: string) => {
+      const h = 2; 
+      setVotesStatus({
+          defense: !!localStorage.getItem(`vote_${mId}_defense_h${h}`),
+          offense: !!localStorage.getItem(`vote_${mId}_offense_h${h}`),
+          mvp: !!localStorage.getItem(`vote_${mId}_mvp_h${h}`)
+      });
+  };
 
   const handleVote = async (category: 'defense' | 'offense' | 'mvp') => {
-      if (!matchId || votesStatus[category]) return;
-      
+      if (!activeMatchId || votesStatus[category]) return;
       const currentHalf = 2;
 
       const { error } = await supabase.from('player_votes').insert({
-          match_id: parseInt(matchId),
+          match_id: parseInt(activeMatchId),
           player_id: parseInt(player.id),
           category: category,
           half: currentHalf
       });
 
       if (!error) {
-          localStorage.setItem(`vote_${matchId}_${category}_h${currentHalf}`, 'true');
+          localStorage.setItem(`vote_${activeMatchId}_${category}_h${currentHalf}`, 'true');
           setVotesStatus(prev => ({ ...prev, [category]: true }));
           if (navigator.vibrate) navigator.vibrate(50);
       }
   };
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200" onClick={onClose}>
+  if (!player) return null;
+
+  const imageUrl = player.imageUrl || player.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(player.name || 'Unknown')}&background=random`;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200" onClick={onClose}>
       <div 
-        className="bg-gradient-to-br from-gray-900 to-black border-2 border-hoops-yellow/50 rounded-2xl w-full max-w-sm relative overflow-hidden shadow-[0_0_50px_rgba(244,255,95,0.2)]" 
+        className="bg-gradient-to-br from-gray-900 to-black border-2 border-hoops-yellow/50 rounded-2xl w-full max-w-sm relative shadow-[0_0_50px_rgba(244,255,95,0.2)] max-h-[85vh] overflow-y-auto no-scrollbar flex flex-col" 
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Background Pattern */}
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 pointer-events-none"></div>
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 pointer-events-none sticky top-0"></div>
         
-        <button onClick={onClose} className="absolute top-4 right-4 text-white hover:text-hoops-yellow transition-colors z-10 bg-black/50 rounded-full p-1">
-            <X size={24} />
-        </button>
+        <div className="sticky top-0 right-0 z-50 flex justify-end p-4 pointer-events-none">
+            <button 
+                onClick={onClose} 
+                className="pointer-events-auto bg-black/80 text-white hover:text-hoops-yellow transition-colors rounded-full p-2 border border-white/20 backdrop-blur-md shadow-lg"
+            >
+                <X size={20} />
+            </button>
+        </div>
 
-        <div className="relative pt-12 pb-6 px-6 flex flex-col items-center">
-            {/* Team Logo Background */}
+        <div className="relative pb-6 px-6 flex flex-col items-center -mt-12">
             {player.team?.logoUrl && (
                 <img src={player.team.logoUrl} className="absolute top-0 left-0 w-full h-48 object-cover opacity-10 blur-xl mask-image-gradient" />
             )}
 
-            {/* Player Image */}
-            <div className="w-32 h-32 rounded-full border-4 border-hoops-yellow shadow-2xl overflow-hidden bg-gray-800 mb-4 relative z-10">
-                <img src={player.imageUrl || player.avatar_url} className="w-full h-full object-cover" alt={player.name} />
+            <div className="w-32 h-32 rounded-full border-4 border-hoops-yellow shadow-2xl overflow-hidden bg-gray-800 mb-4 relative z-10 shrink-0">
+                <SmoothImage src={imageUrl} className="w-full h-full" alt={player.name} />
             </div>
 
             <h2 className="text-3xl font-display font-bold italic uppercase text-white leading-none text-center mb-1">
-                {player.name}
+                {player.name || 'Joueur Inconnu'}
             </h2>
             <div className="flex items-center gap-2 mb-6">
-                <span className="bg-hoops-primary text-white text-xs font-bold px-2 py-0.5 rounded">#{player.number}</span>
-                <span className="text-gray-400 font-bold uppercase text-sm">{player.position}</span>
-                <span className="text-hoops-yellow font-bold uppercase text-sm">• {player.team?.name}</span>
+                <span className="bg-hoops-primary text-white text-xs font-bold px-2 py-0.5 rounded">#{player.number || '00'}</span>
+                <span className="text-gray-400 font-bold uppercase text-sm">{player.position || 'N/A'}</span>
+                <span className="text-hoops-yellow font-bold uppercase text-sm">• {player.team?.name || 'Free Agent'}</span>
             </div>
 
-            {/* Main Stats Grid */}
-            <div className="grid grid-cols-3 gap-3 w-full mb-4">
-                <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
-                    <div className="text-[10px] text-gray-500 font-bold uppercase mb-1">{mainStatLabel}</div>
-                    <div className="text-2xl font-mono font-bold text-hoops-yellow">{mainStatValue}</div>
-                </div>
-                <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
-                    <div className="text-[10px] text-gray-500 font-bold uppercase mb-1">REB</div>
-                    <div className="text-2xl font-mono font-bold text-white">{reb}</div>
-                </div>
-                <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
-                    <div className="text-[10px] text-gray-500 font-bold uppercase mb-1">AST</div>
-                    <div className="text-2xl font-mono font-bold text-white">{ast}</div>
-                </div>
-            </div>
-
-            {/* Stats Row 2 (Blocks/Steals/Games) */}
-            <div className="flex justify-center gap-4 text-xs text-gray-400 font-mono mb-4">
-                 <span>BLK: <b className="text-white">{blk}</b></span>
-                 <span>STL: <b className="text-white">{stl}</b></span>
-                 {player.stats?.games_played && <span>Matchs: <b className="text-white">{player.stats.games_played}</b></span>}
-            </div>
-
-            {/* Detailed Shooting Stats (if available - usually single match) */}
-            {(p3 > 0 || p2 > 0 || p1 > 0) && (
-                <div className="w-full flex justify-between gap-2 mb-6 text-xs font-mono text-gray-400 bg-black/30 p-2 rounded-lg">
-                    <span>3PTS: <strong className="text-white">{p3}</strong></span>
-                    <span>2PTS: <strong className="text-white">{p2}</strong></span>
-                    <span>LF: <strong className="text-white">{p1}</strong></span>
-                </div>
-            )}
-
-            {/* Voting Section (Only if matchId is present) */}
-            {matchId && (
-                <div className="w-full border-t border-white/10 pt-4 mt-2">
-                    <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 text-center">Voter pour ce joueur</h3>
-                    <div className="grid grid-cols-3 gap-3">
-                        <VoteBtn 
-                            label="Défense" 
-                            icon={<Shield size={18}/>} 
-                            active={votesStatus.defense} 
-                            onClick={() => handleVote('defense')} 
-                            color="blue"
-                        />
-                        <VoteBtn 
-                            label="Attaque" 
-                            icon={<Zap size={18}/>} 
-                            active={votesStatus.offense} 
-                            onClick={() => handleVote('offense')} 
-                            color="red"
-                        />
-                        <VoteBtn 
-                            label="MVP" 
-                            icon={<Star size={18}/>} 
-                            active={votesStatus.mvp} 
-                            onClick={() => handleVote('mvp')} 
-                            color="yellow"
-                        />
+            {loading ? (
+                 <div className="py-8"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-hoops-yellow"></div></div>
+            ) : (
+                <>
+                    <div className="flex items-center justify-center gap-2 mb-2 w-full">
+                        <BarChart3 size={14} className="text-gray-500"/>
+                        <span className="text-[10px] uppercase font-bold text-gray-500 tracking-widest">Moyennes Saison ({seasonStats.games_played} Matchs)</span>
                     </div>
-                </div>
+
+                    <div className="grid grid-cols-3 gap-3 w-full mb-4">
+                        <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
+                            <div className="text-[10px] text-gray-500 font-bold uppercase mb-1">PTS/M</div>
+                            <div className="text-2xl font-mono font-bold text-hoops-yellow">{seasonStats.ppg}</div>
+                        </div>
+                        <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
+                            <div className="text-[10px] text-gray-500 font-bold uppercase mb-1">REB/M</div>
+                            <div className="text-2xl font-mono font-bold text-white">{seasonStats.rpg}</div>
+                        </div>
+                        <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
+                            <div className="text-[10px] text-gray-500 font-bold uppercase mb-1">AST/M</div>
+                            <div className="text-2xl font-mono font-bold text-white">{seasonStats.apg}</div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 w-full mb-4">
+                         <div className="bg-white/5 border border-white/10 rounded-lg p-2 flex justify-between items-center px-4">
+                            <span className="text-[10px] text-gray-400 font-bold uppercase">BLK/M</span>
+                            <span className="font-mono font-bold text-white">{seasonStats.bpg}</span>
+                         </div>
+                         <div className="bg-white/5 border border-white/10 rounded-lg p-2 flex justify-between items-center px-4">
+                            <span className="text-[10px] text-gray-400 font-bold uppercase">INT/M</span>
+                            <span className="font-mono font-bold text-white">{seasonStats.spg}</span>
+                         </div>
+                    </div>
+
+                    {/* Total Points (Barre retirée, juste le total) */}
+                    <div className="w-full bg-white/5 rounded-lg p-3 mb-6 border border-white/5 flex justify-between items-center">
+                         <span className="text-xs font-mono text-gray-400 uppercase">Points Totaux Saison</span>
+                         <span className="text-xl font-bold text-white font-mono">{seasonStats.total_points} PTS</span>
+                    </div>
+
+                    {/* Voting Section */}
+                    {activeMatchId && (
+                        <div className="w-full border-t border-white/10 pt-4 mt-2 mb-4">
+                            <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 text-center flex items-center justify-center gap-2">
+                                <Star size={12} className="text-yellow-500"/> Voter pour ce joueur
+                            </h3>
+                            <div className="grid grid-cols-3 gap-3">
+                                <VoteBtn 
+                                    label="Défense" 
+                                    icon={<Shield size={18}/>} 
+                                    active={votesStatus.defense} 
+                                    onClick={() => handleVote('defense')} 
+                                    color="blue"
+                                />
+                                <VoteBtn 
+                                    label="Attaque" 
+                                    icon={<Zap size={18}/>} 
+                                    active={votesStatus.offense} 
+                                    onClick={() => handleVote('offense')} 
+                                    color="red"
+                                />
+                                <VoteBtn 
+                                    label="MVP" 
+                                    icon={<Trophy size={18}/>} 
+                                    active={votesStatus.mvp} 
+                                    onClick={() => handleVote('mvp')} 
+                                    color="yellow"
+                                />
+                            </div>
+                            <p className="text-[10px] text-center text-gray-600 mt-2 italic flex items-center justify-center gap-1">
+                                <Calendar size={10}/> Match: {activeMatchName || `#${activeMatchId}`}
+                            </p>
+                        </div>
+                    )}
+                </>
             )}
+
+            <button 
+                onClick={onClose}
+                className="w-full py-3 mt-2 bg-white/10 hover:bg-white/20 rounded-xl font-bold uppercase text-sm transition-colors text-gray-300 md:hidden"
+            >
+                Fermer
+            </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

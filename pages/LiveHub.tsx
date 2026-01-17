@@ -1,3 +1,4 @@
+// Developed by KBP (King of Best Practice) - 2026
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Match, Player } from '../types';
@@ -156,6 +157,7 @@ const LiveHub: React.FC = () => {
 
   const TeamLogo = ({ url, name, size="md" }: any) => {
       const sizeClasses = size === "lg" ? "w-20 h-20 md:w-32 md:h-32" : "w-14 h-14 md:w-20 md:h-20";
+      // Modification KBP : Suppression du padding pour un effet cercle parfait
       return (
         <div className={`${sizeClasses} rounded-full border-4 border-white/10 shadow-2xl bg-black flex-shrink-0 relative overflow-hidden group`}>
             {url ? (
@@ -217,7 +219,7 @@ const LiveHub: React.FC = () => {
   // --- LOGIQUE AFFICHAGE VIDEO VS LIEN EXTERNE ---
   // Si YoutubeID existe -> Iframe
   // Si Pas YoutubeID MAIS SocialLink -> Gros Bouton
-  // Sinon -> Placeholder
+  // Sinon -> Backup
   const hasVideo = !!match.youtubeId;
   const hasSocial = !!match.socialLink && !match.youtubeId;
 
@@ -226,7 +228,7 @@ const LiveHub: React.FC = () => {
       
       {/* --- MAJESTIC SCOREBOARD (TOP) --- */}
       <div className="w-full relative rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-[#0a0a0a]">
-          {/* Background blurred logos */}
+          {/* Ambiance visuelle de fond */}
           <img src={match.teamA.logoUrl} className="absolute -left-20 top-0 w-96 h-96 opacity-10 blur-3xl pointer-events-none" />
           <img src={match.teamB.logoUrl} className="absolute -right-20 top-0 w-96 h-96 opacity-10 blur-3xl pointer-events-none" />
           
@@ -234,7 +236,8 @@ const LiveHub: React.FC = () => {
           <div className="bg-black/40 text-center py-2 border-b border-white/5 flex items-center justify-center gap-3">
               <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-500">Presented by</span>
               <div className="flex gap-4 opacity-70 grayscale">
-                  <img src="/partners/logo_hoops_game.jpg" className="h-4 w-auto" alt="Hoops Game" />
+                  <img src="/partners/logo_hoops_game.jpg" className="h-3 w-auto rounded-sm" />
+                  <img src="/partners/logo_omega_sport.jpg" className="h-3 w-auto rounded-sm" />
               </div>
           </div>
 
@@ -244,7 +247,8 @@ const LiveHub: React.FC = () => {
                   <div className="flex flex-col items-center gap-4 flex-1">
                       <TeamLogo url={match.teamA.logoUrl} name={match.teamA.name} size="lg" />
                       <div className="text-center">
-                          <h2 className="text-3xl md:text-5xl font-display font-bold italic uppercase leading-none mb-2">{match.teamA.name}</h2>
+                          {/* KBP: Utilisation de whitespace-nowrap pour éviter les retours à la ligne intempestifs */}
+                          <h2 className="text-3xl md:text-5xl font-display font-bold italic uppercase leading-none mb-2 whitespace-nowrap">{match.teamA.name}</h2>
                           <div className="flex justify-center">
                              <TeamStatsDisplay fouls={match.teamAFouls} timeouts={match.teamATimeouts} align="center" />
                           </div>
@@ -269,7 +273,7 @@ const LiveHub: React.FC = () => {
                   <div className="flex flex-col items-center gap-4 flex-1">
                       <TeamLogo url={match.teamB.logoUrl} name={match.teamB.name} size="lg" />
                       <div className="text-center">
-                          <h2 className="text-3xl md:text-5xl font-display font-bold italic uppercase leading-none mb-2">{match.teamB.name}</h2>
+                          <h2 className="text-3xl md:text-5xl font-display font-bold italic uppercase leading-none mb-2 whitespace-nowrap">{match.teamB.name}</h2>
                           <div className="flex justify-center">
                              <TeamStatsDisplay fouls={match.teamBFouls} timeouts={match.teamBTimeouts} align="center" />
                           </div>
@@ -311,7 +315,6 @@ const LiveHub: React.FC = () => {
                    </div>
               </div>
           ) : (
-              // CAS 3: RIEN (Placeholder)
               <video src={match.videoUrl} className="w-full h-full object-cover opacity-90" autoPlay muted loop playsInline />
           )}
 

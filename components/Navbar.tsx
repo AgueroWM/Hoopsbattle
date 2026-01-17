@@ -19,9 +19,9 @@ const Navbar: React.FC = () => {
             <Link to="/" className="flex-shrink-0 group flex items-center gap-3">
               {!logoError ? (
                 <img 
-                  src="/logo.png" 
+                  src="/partners/logo_hoops_game.jpg" 
                   alt="HOOPS BATTLE" 
-                  className="h-10 w-auto object-contain"
+                  className="h-10 w-auto object-contain rounded-md"
                   onError={() => setLogoError(true)}
                 />
               ) : (

@@ -3,13 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
-    <title>Hoops Game - The Main Event</title>
-    <link rel="icon" type="image/jpeg" href="/partners/logo_hoops_game.jpg" />
-    <link rel="apple-touch-icon" href="/partners/logo_hoops_game.jpg" />
+    <link rel="icon" href="/partners/logo_hoops_game.jpg" />
+    <title>Hoops Battle - Official Hub</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Teko:wght@300;400;500;600;700&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     <script>
-      // Polyfill simple pour éviter le crash sur process.env.API_KEY
       window.process = window.process || { env: {} };
       
       tailwind.config = {
@@ -17,12 +15,12 @@
           extend: {
             colors: {
               hoops: {
-                bg: '#020617', // Very dark slate
-                surface: '#0f172a', // Dark slate
-                card: '#1e293b', // Adding missing card color
+                bg: '#020617', 
+                surface: '#0f172a',
+                card: '#1e293b', 
                 surfaceHighlight: '#334155',
-                primary: '#3b82f6', // Bright Blue
-                yellow: '#F4FF5F', // Neon Yellow/Greenish
+                primary: '#3b82f6', 
+                yellow: '#F4FF5F',
                 yellowDim: '#cae00d',
                 text: '#f8fafc'
               }
@@ -62,16 +60,27 @@
         border: 1px solid rgba(255, 255, 255, 0.08);
       }
       
-      /* Hide scrollbar */
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-      /* Safe area for mobile dock */
       .pb-safe {
         padding-bottom: env(safe-area-inset-bottom, 20px);
       }
     </style>
-
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react/": "https://esm.sh/react@18.2.0/",
+    "react-dom": "https://esm.sh/react-dom@18.2.0?deps=react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client?deps=react@18.2.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@6.22.0?deps=react@18.2.0,react-dom@18.2.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.39.0",
+    "lucide-react": "https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0/"
+  }
+}
+</script>
 <link rel="stylesheet" href="/index.css">
 </head>
   <body>

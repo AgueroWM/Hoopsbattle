@@ -252,9 +252,9 @@ const Home: React.FC = () => {
           <div className="max-w-7xl mx-auto flex items-center justify-center md:justify-between gap-8 flex-wrap opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 hidden md:block">Partenaires Officiels</span>
              <div className="flex items-center gap-8 md:gap-16">
-                 {/* KBP Partners Display */}
-                 <img src="/partners/logo_hoops_game.jpg" className="h-6 md:h-8 w-auto rounded-sm" alt="Hoops Game" />
-                 <img src="/partners/logo_omega_sport.jpg" className="h-6 md:h-8 w-auto rounded-sm" alt="Omega Sport" />
+                 {/* Replace with real logos */}
+                 <img src="/partners/logo_hoops_game.jpg" className="h-6 md:h-8 w-auto rounded-md" alt="Hoops Game" />
+                 <img src="/partners/logo_omega_sport.jpg" className="h-6 md:h-8 w-auto rounded-md" alt="Omega Sport" />
              </div>
           </div>
       </section>

@@ -1,9 +1,10 @@
 import { Team, Match, HighlightVideo, BracketMatch } from './types';
 
-// KBP: Avatar generation utility
+// Helper to generate placeholder images
 const getLogo = (name: string) => `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0f172a&color=F4FF5F&size=200&font-size=0.33&bold=true&length=2&rounded=true`;
 
-export const TEAMS = [
+// --- TEAMS ---
+export const TEAMS: Team[] = [
   // --- EXISTING & CONFIRMED ---
   { id: 't_brigade', name: 'La Brigade Fantôme', city: 'Paris', logoUrl: getLogo('La Brigade Fantôme'), wins: 0, losses: 0, roster: [] },
   { id: 't_genz', name: 'Gen Z', city: 'Lyon', logoUrl: getLogo('Gen Z'), wins: 0, losses: 0, roster: [] },
@@ -29,6 +30,7 @@ export const TEAMS = [
   { id: 't_warriors', name: 'Warriors', city: 'San Francisco', logoUrl: getLogo('Warriors'), wins: 0, losses: 0, roster: [] },
   { id: 't_mercenaires', name: 'Les Mercenaires', city: 'Grenoble', logoUrl: getLogo('Les Mercenaires'), wins: 0, losses: 0, roster: [] },
 
+  // --- DYNAMIC PLACEHOLDERS ---
   { id: 't_win_m1', name: 'Vainqueur Match 1', city: 'TBD', logoUrl: getLogo('W1'), wins: 0, losses: 0, roster: [] },
   { id: 't_win_m2', name: 'Vainqueur Match 2', city: 'TBD', logoUrl: getLogo('W2'), wins: 0, losses: 0, roster: [] },
   { id: 't_win_m3', name: 'Vainqueur Match 3', city: 'TBD', logoUrl: getLogo('W3'), wins: 0, losses: 0, roster: [] },

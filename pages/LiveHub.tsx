@@ -1,29 +1,25 @@
-// Developed by KBP (King of Best Practice) - 2026
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { Match, Player } from '../types';
-import { Maximize2, Minimize2, ExternalLink, Signal, ArrowRight, Smartphone, PlayCircle } from 'lucide-react';
+import { Player } from '../types';
+import { ExternalLink, Smartphone } from 'lucide-react';
 import PlayerModal from '../components/PlayerModal';
 
 const LiveHub: React.FC = () => {
   const [match, setMatch] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
-  // Video State
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const videoContainerRef = useRef<HTMLDivElement>(null);
-
   // Player Card & Voting
   const [viewingPlayer, setViewingPlayer] = useState<any>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchLiveMatch();
     
-    // Polling de sécurité toutes les 5s pour le statut
-    const interval = setInterval(fetchLiveMatch, 5000);
+    // Heartbeat for live status
+    const heartbeat = setInterval(fetchLiveMatch, 8000);
 
     const subscription = supabase
-      .channel('public:livehub')
+      .channel('live_hub_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, () => { fetchLiveMatch(); })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'players' }, () => { fetchLiveMatch(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'player_stats' }, () => { fetchLiveMatch(); })
@@ -31,14 +27,14 @@ const LiveHub: React.FC = () => {
 
     return () => { 
         supabase.removeChannel(subscription);
-        clearInterval(interval);
+        clearInterval(heartbeat);
     };
   }, []);
 
   async function fetchLiveMatch() {
     try {
-      // Priorité 1: Chercher un match explicitement "live"
-      let { data, error } = await supabase
+      // Priority: Live > Scheduled
+      let { data: liveData } = await supabase
         .from('matches')
         .select(`
           *,
@@ -48,8 +44,7 @@ const LiveHub: React.FC = () => {
         .eq('status', 'live')
         .maybeSingle();
 
-      // Priorité 2: Si aucun live, chercher le prochain "scheduled"
-      if (!data) {
+      if (!liveData) {
           const { data: scheduled } = await supabase
             .from('matches')
             .select(`
@@ -61,18 +56,18 @@ const LiveHub: React.FC = () => {
             .order('start_time', { ascending: true })
             .limit(1)
             .maybeSingle();
-          data = scheduled;
+          liveData = scheduled;
       }
 
-      if (data) {
-        // Fetch Live Stats for players
-        const { data: liveStats } = await supabase
+      if (liveData) {
+        // Fetch Live Stats
+        const { data: statsData } = await supabase
             .from('player_stats')
             .select('*')
-            .eq('match_id', data.id);
+            .eq('match_id', liveData.id);
 
         const mapPlayer = (p: any) => {
-            const s = liveStats?.find((ls: any) => ls.player_id === p.id) || {};
+            const s = statsData?.find((ls: any) => ls.player_id === p.id) || {};
             return {
                 id: p.id.toString(),
                 name: p.name,
@@ -82,67 +77,52 @@ const LiveHub: React.FC = () => {
                 points: s.points || 0,
                 rebounds: s.rebounds_total || 0,
                 assists: s.assists || 0,
-                points_1_made: s.points_1_made || 0,
-                points_2_made: s.points_2_made || 0,
-                points_3_made: s.points_3_made || 0,
                 imageUrl: p.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=0D8ABC&color=fff&size=200`,
                 is_on_court: p.is_on_court
             };
         };
 
-        const teamARoster = data.team_a?.players?.map(mapPlayer) || [];
-        const teamBRoster = data.team_b?.players?.map(mapPlayer) || [];
-
-        const activePlayersA = teamARoster.filter((p: any) => p.is_on_court).map((p: any) => p.id);
-        const activePlayersB = teamBRoster.filter((p: any) => p.is_on_court).map((p: any) => p.id);
+        const activePlayersA = liveData.team_a?.players?.map(mapPlayer).filter((p:any) => p.is_on_court).map((p:any) => p.id) || [];
+        const activePlayersB = liveData.team_b?.players?.map(mapPlayer).filter((p:any) => p.is_on_court).map((p:any) => p.id) || [];
 
         const mappedMatch: any = {
-            id: data.id.toString(),
+            id: liveData.id.toString(),
             teamA: { 
-                ...data.team_a, 
-                id: data.team_a?.id.toString(),
-                name: data.team_a?.name, 
-                city: data.team_a?.short_name || 'City',
-                logoUrl: data.team_a?.logo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.team_a?.name)}&background=0f172a&color=F4FF5F&size=200`,
-                roster: teamARoster
+                ...liveData.team_a, 
+                logoUrl: liveData.team_a?.logo_url,
+                roster: liveData.team_a?.players?.map(mapPlayer) || []
             },
             teamB: { 
-                 ...data.team_b, 
-                 id: data.team_b?.id.toString(),
-                name: data.team_b?.name, 
-                city: data.team_b?.short_name || 'City',
-                logoUrl: data.team_b?.logo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.team_b?.name)}&background=0f172a&color=F4FF5F&size=200`,
-                roster: teamBRoster
+                 ...liveData.team_b, 
+                 logoUrl: liveData.team_b?.logo_url,
+                 roster: liveData.team_b?.players?.map(mapPlayer) || []
             },
-            scoreA: data.score_team_a ?? 0,
-            scoreB: data.score_team_b ?? 0,
-            quarter: data.quarter || 1, // Si null, par défaut 1
-            timeLeft: data.time_left || 'LIVE',
-            isLive: data.status === 'live', // Source de vérité pour l'état Live
-            status: data.status,
-            events: [],
-            videoUrl: data.video_url || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-            youtubeId: data.youtube_id,
-            socialLink: data.social_link,
-            socialLinkText: data.social_link_text,
-            activePlayersA: activePlayersA,
-            activePlayersB: activePlayersB,
-            teamAFouls: data.team_a_fouls || 0,
-            teamBFouls: data.team_b_fouls || 0,
-            teamATimeouts: data.team_a_timeouts || 0,
-            teamBTimeouts: data.team_b_timeouts || 0
+            scoreA: liveData.score_team_a ?? 0,
+            scoreB: liveData.score_team_b ?? 0,
+            quarter: liveData.quarter || 1,
+            status: liveData.status,
+            videoUrl: liveData.video_url,
+            youtubeId: liveData.youtube_id,
+            socialLink: liveData.social_link,
+            socialLinkText: liveData.social_link_text,
+            activePlayersA,
+            activePlayersB,
+            teamAFouls: liveData.team_a_fouls || 0,
+            teamBFouls: liveData.team_b_fouls || 0,
+            teamATimeouts: liveData.team_a_timeouts || 0,
+            teamBTimeouts: liveData.team_b_timeouts || 0
         };
 
         setMatch(mappedMatch);
       }
     } catch (error) {
-      console.error("Erreur fetch LiveHub:", error);
+      console.error("LiveHub sync error", error);
     } finally {
       setLoading(false);
     }
   }
 
-  const handlePlayerClick = async (p: any) => {
+  const handlePlayerClick = (p: any) => {
       const fullPlayer = {
           ...p,
           team: match.teamA.roster.find((pl:any) => pl.id === p.id) ? match.teamA : match.teamB
@@ -150,22 +130,20 @@ const LiveHub: React.FC = () => {
       setViewingPlayer(fullPlayer);
   };
 
-  const handleImgError = (e: React.SyntheticEvent<HTMLImageElement>) => {
-        e.currentTarget.style.display = 'none';
-        e.currentTarget.nextElementSibling?.classList.remove('hidden');
-  };
-
   const TeamLogo = ({ url, name, size="md" }: any) => {
       const sizeClasses = size === "lg" ? "w-20 h-20 md:w-32 md:h-32" : "w-14 h-14 md:w-20 md:h-20";
-      // Modification KBP : Suppression du padding pour un effet cercle parfait
+      // FIX: Police plus grande pour les initiales (text-3xl pour lg, text-xl pour md)
+      const fontSize = size === "lg" ? "text-4xl" : "text-xl";
+      
       return (
         <div className={`${sizeClasses} rounded-full border-4 border-white/10 shadow-2xl bg-black flex-shrink-0 relative overflow-hidden group`}>
             {url ? (
-                <img src={url} alt={name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" onError={handleImgError} />
+                <img src={url} alt={name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
             ) : (
-                <div className="w-full h-full bg-black flex items-center justify-center font-bold text-gray-400 uppercase text-xs">{name.substring(0, 2)}</div>
+                <div className={`w-full h-full bg-gray-900 flex items-center justify-center font-bold text-gray-500 uppercase ${fontSize}`}>
+                    {name?.substring(0, 2)}
+                </div>
             )}
-            <div className="hidden w-full h-full bg-black flex items-center justify-center font-bold text-gray-400 uppercase text-xs">{name.substring(0, 2)}</div>
         </div>
       )
   };
@@ -192,47 +170,34 @@ const LiveHub: React.FC = () => {
   const activeTeamA = match.teamA.roster.filter((p: any) => p.is_on_court);
   const activeTeamB = match.teamB.roster.filter((p: any) => p.is_on_court);
   
-  // LOGIQUE QUARTER / STATUS CORRIGEE
-  // Si le match est marqué comme "live" en DB, on force l'affichage LIVE.
   let quarterLabel = "À VENIR";
-  let statusBadge = "À VENIR";
   let statusColor = "bg-blue-900/30 text-blue-300";
 
   if (match.status === 'live') {
-      statusBadge = "LIVE";
       statusColor = "bg-red-600 text-white animate-pulse";
-      
       if (match.quarter === 1) quarterLabel = "1ère Mi-temps";
       else if (match.quarter === 2) quarterLabel = "2ème Mi-temps";
       else if (match.quarter > 2) quarterLabel = `Prolongation ${match.quarter - 2}`;
       else quarterLabel = "En Direct";
-      
   } else if (match.status === 'finished') {
       quarterLabel = "TERMINÉ";
-      statusBadge = "FINI";
       statusColor = "bg-gray-700 text-gray-400";
   } else {
-      // Scheduled
-      quarterLabel = new Date(match.start_time || Date.now()).toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
+      quarterLabel = new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
   }
 
-  // --- LOGIQUE AFFICHAGE VIDEO VS LIEN EXTERNE ---
-  // Si YoutubeID existe -> Iframe
-  // Si Pas YoutubeID MAIS SocialLink -> Gros Bouton
-  // Sinon -> Backup
   const hasVideo = !!match.youtubeId;
   const hasSocial = !!match.socialLink && !match.youtubeId;
 
   return (
     <div className="pt-20 px-2 pb-24 md:max-w-7xl mx-auto flex flex-col gap-6 relative">
       
-      {/* --- MAJESTIC SCOREBOARD (TOP) --- */}
+      {/* SCOREBOARD */}
       <div className="w-full relative rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-[#0a0a0a]">
-          {/* Ambiance visuelle de fond */}
-          <img src={match.teamA.logoUrl} className="absolute -left-20 top-0 w-96 h-96 opacity-10 blur-3xl pointer-events-none" />
-          <img src={match.teamB.logoUrl} className="absolute -right-20 top-0 w-96 h-96 opacity-10 blur-3xl pointer-events-none" />
+          {/* Background Blurred Assets */}
+          {match.teamA.logoUrl && <img src={match.teamA.logoUrl} className="absolute -left-20 top-0 w-96 h-96 opacity-10 blur-3xl pointer-events-none" />}
+          {match.teamB.logoUrl && <img src={match.teamB.logoUrl} className="absolute -right-20 top-0 w-96 h-96 opacity-10 blur-3xl pointer-events-none" />}
           
-          {/* "Presented By" Strip */}
           <div className="bg-black/40 text-center py-2 border-b border-white/5 flex items-center justify-center gap-3">
               <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-500">Presented by</span>
               <div className="flex gap-4 opacity-70 grayscale">
@@ -247,8 +212,7 @@ const LiveHub: React.FC = () => {
                   <div className="flex flex-col items-center gap-4 flex-1">
                       <TeamLogo url={match.teamA.logoUrl} name={match.teamA.name} size="lg" />
                       <div className="text-center">
-                          {/* KBP: Utilisation de whitespace-nowrap pour éviter les retours à la ligne intempestifs */}
-                          <h2 className="text-3xl md:text-5xl font-display font-bold italic uppercase leading-none mb-2 whitespace-nowrap">{match.teamA.name}</h2>
+                          <h2 className="text-3xl md:text-5xl font-display font-bold italic uppercase leading-none mb-2">{match.teamA.name}</h2>
                           <div className="flex justify-center">
                              <TeamStatsDisplay fouls={match.teamAFouls} timeouts={match.teamATimeouts} align="center" />
                           </div>
@@ -273,7 +237,7 @@ const LiveHub: React.FC = () => {
                   <div className="flex flex-col items-center gap-4 flex-1">
                       <TeamLogo url={match.teamB.logoUrl} name={match.teamB.name} size="lg" />
                       <div className="text-center">
-                          <h2 className="text-3xl md:text-5xl font-display font-bold italic uppercase leading-none mb-2 whitespace-nowrap">{match.teamB.name}</h2>
+                          <h2 className="text-3xl md:text-5xl font-display font-bold italic uppercase leading-none mb-2">{match.teamB.name}</h2>
                           <div className="flex justify-center">
                              <TeamStatsDisplay fouls={match.teamBFouls} timeouts={match.teamBTimeouts} align="center" />
                           </div>
@@ -283,34 +247,31 @@ const LiveHub: React.FC = () => {
           </div>
       </div>
 
-      {/* --- VIDEO CONTAINER / SOCIAL LINK BANNER --- */}
+      {/* VIDEO PLAYER */}
       <div 
           ref={videoContainerRef} 
-          className={`aspect-video bg-black rounded-xl overflow-hidden relative shadow-2xl border border-white/10 group ${isFullscreen ? 'fixed inset-0 z-[50] rounded-none' : 'w-full max-w-5xl mx-auto'}`}
+          className={`aspect-video bg-black rounded-xl overflow-hidden relative shadow-2xl border border-white/10 group w-full max-w-5xl mx-auto`}
       >
           {hasVideo ? (
-              // CAS 1: YOUTUBE/TWITCH
               match.youtubeId.startsWith('twitch:') ? (
-                  <iframe src={`https://player.twitch.tv/?channel=${match.youtubeId.replace('twitch:', '')}&parent=localhost&parent=hoops-game.vercel.app&parent=${window.location.hostname}`} height="100%" width="100%" allowFullScreen title="Live Twitch" className="w-full h-full"></iframe>
+                  <iframe src={`https://player.twitch.tv/?channel=${match.youtubeId.replace('twitch:', '')}&parent=localhost&parent=${window.location.hostname}`} height="100%" width="100%" allowFullScreen title="Live Twitch" className="w-full h-full"></iframe>
               ) : (
                   <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${match.youtubeId}?autoplay=1&origin=${window.location.origin}&modestbranding=1&rel=0`} title="Live Match" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen className="w-full h-full" referrerPolicy="strict-origin-when-cross-origin"></iframe>
               )
           ) : hasSocial ? (
-              // CAS 2: LIEN SOCIAL (Pas de player vidéo)
               <div className="w-full h-full relative">
-                  {/* Background image fallback */}
                    <div className="absolute inset-0 bg-cover bg-center opacity-30 blur-sm" style={{backgroundImage: "url('https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=2090&auto=format&fit=crop')"}}></div>
                    <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-black/60">
                        <Smartphone size={48} className="text-hoops-yellow mb-4 animate-bounce" />
                        <h3 className="text-3xl font-display font-bold uppercase italic text-white mb-2">Live sur nos réseaux</h3>
-                       <p className="text-gray-300 mb-6 max-w-md">{match.socialLinkText || "Ce match est diffusé exclusivement sur nos réseaux sociaux. Cliquez ci-dessous pour y accéder."}</p>
+                       <p className="text-gray-300 mb-6 max-w-md">{match.socialLinkText || "Diffusion exclusive sur mobile. Cliquez pour accéder."}</p>
                        <a 
                            href={match.socialLink} 
                            target="_blank" 
                            rel="noopener noreferrer"
-                           className="bg-hoops-primary hover:bg-blue-600 text-white px-8 py-4 rounded-xl font-bold uppercase tracking-widest flex items-center gap-3 transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(59,130,246,0.5)]"
+                           className="bg-hoops-primary hover:bg-blue-600 text-white px-8 py-4 rounded-xl font-bold uppercase tracking-widest flex items-center gap-3 transition-all transform hover:scale-105 shadow-lg"
                        >
-                           <ExternalLink size={20} /> Accéder au Live
+                           <ExternalLink size={20} /> Ouvrir le Live
                        </a>
                    </div>
               </div>
@@ -323,7 +284,7 @@ const LiveHub: React.FC = () => {
           </div>
       </div>
 
-      {/* ACTIVE PLAYERS HORIZONTAL SCROLL */}
+      {/* COURT STATUS */}
       <div className="glass-panel p-4 rounded-xl">
           <h3 className="text-xs font-bold uppercase text-gray-400 mb-3 flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-hoops-yellow rounded-full animate-pulse"></div>
@@ -331,7 +292,7 @@ const LiveHub: React.FC = () => {
           </h3>
           
           <div className="flex flex-col gap-4">
-              {/* Team A Line */}
+              {/* Team A */}
               <div className="flex items-center gap-4 overflow-x-auto pb-2 no-scrollbar">
                   <div className="w-1 bg-hoops-primary h-8 rounded-full shrink-0"></div>
                   {activeTeamA.map((p: Player) => (
@@ -345,7 +306,7 @@ const LiveHub: React.FC = () => {
                   {activeTeamA.length === 0 && <span className="text-xs text-gray-500 italic">Aucun joueur</span>}
               </div>
 
-              {/* Team B Line */}
+              {/* Team B */}
               <div className="flex items-center gap-4 overflow-x-auto pb-2 no-scrollbar">
                   <div className="w-1 bg-hoops-yellow h-8 rounded-full shrink-0"></div>
                   {activeTeamB.map((p: Player) => (
@@ -361,7 +322,6 @@ const LiveHub: React.FC = () => {
           </div>
       </div>
 
-      {/* --- PLAYER MODAL (TRADING CARD WITH VOTING) --- */}
       {viewingPlayer && (
           <PlayerModal 
             player={viewingPlayer} 

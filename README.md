@@ -1,20 +1,20 @@
-# Hoops Game Hub
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-La plateforme officielle interactive pour l'événement Hoops Game. Streaming, statistiques en direct, gestion d'équipe et analyse.
+# Run and deploy your AI Studio app
 
-## Installation et Lancement
+This contains everything you need to run your app locally.
 
-**Prérequis :** Node.js
+View your app in AI Studio: https://ai.studio/apps/drive/1pj1KCK5qjhf9x3Llr3K8y0OV86mBtFBh
 
-1. Installer les dépendances :
+## Run Locally
+
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
    `npm install`
-
-2. Lancer l'application :
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
    `npm run dev`
-
-## Fonctionnalités
-
-- Streaming en direct
-- Statistiques des matchs
-- Classements et brackets
-- Administration
